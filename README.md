@@ -14,8 +14,7 @@
 
 - 💻 Understanding and experience in Java and Spring Boot
 
-- ⚡ Fun fact: My life is like a NullPointerException—it keeps pointing to nothing until I give it some value.🔭 I’m currently working in Jio Platforms Limited   
-  
+- ⚡ Fun fact: My life is like a NullPointerException—it keeps pointing to nothing until I give it some value.
 
 <br/>  
 
