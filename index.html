@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Hunter Dashboard — Khubaib</title>
+<style>
+:root {
+  --bg: #07070f;
+  --bg2: #0e0e1a;
+  --bg3: #13131f;
+  --card: #12121e;
+  --border: #1e1e35;
+  --purple: #7b2fff;
+  --purple2: #5b1bd4;
+  --blue: #1a6fff;
+  --gold: #ffd700;
+  --gold2: #ffaa00;
+  --green: #00ff88;
+  --red: #ff3355;
+  --cyan: #00cfff;
+  --text: #e2e2f0;
+  --text2: #9090b8;
+  --text3: #5a5a80;
+  --glow: 0 0 20px rgba(123,47,255,0.4);
+  --glow-gold: 0 0 20px rgba(255,215,0,0.3);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;overflow-x:hidden;}
+::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:var(--bg2);} ::-webkit-scrollbar-thumb{background:var(--purple);border-radius:2px;}
+
+/* NAV */
+.nav{position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border);display:flex;z-index:100;padding:6px 0 max(6px, env(safe-area-inset-bottom));}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;cursor:pointer;border:none;background:none;color:var(--text3);font-size:10px;transition:all .2s;}
+.nav-btn.active{color:var(--purple);}
+.nav-btn .icon{font-size:20px;}
+.nav-btn.active .icon{filter:drop-shadow(0 0 8px var(--purple));}
+
+/* PAGES */
+.page{display:none;padding:16px 16px 90px;max-width:480px;margin:0 auto;}
+.page.active{display:block;}
+
+/* HEADER */
+.page-title{font-size:11px;letter-spacing:3px;color:var(--purple);text-transform:uppercase;margin-bottom:16px;}
+
+/* HUNTER CARD */
+.hunter-card{background:linear-gradient(135deg,#0d0d20 0%,#120a2a 50%,#0d0d20 100%);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px;position:relative;overflow:hidden;}
+.hunter-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent 60%,rgba(123,47,255,.08));pointer-events:none;}
+.hunter-card::after{content:'';position:absolute;top:-50%;right:-30%;width:200px;height:200px;background:radial-gradient(circle,rgba(123,47,255,.1) 0%,transparent 70%);pointer-events:none;}
+.hunter-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;}
+.hunter-name{font-size:22px;font-weight:700;letter-spacing:1px;}
+.hunter-sub{font-size:11px;color:var(--text2);margin-top:2px;}
+.rank-badge{background:linear-gradient(135deg,var(--purple),var(--blue));border-radius:8px;padding:6px 12px;text-align:center;}
+.rank-letter{font-size:24px;font-weight:900;line-height:1;}
+.rank-label{font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.7);}
+.level-row{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+.level-num{font-size:40px;font-weight:900;background:linear-gradient(135deg,var(--gold),var(--gold2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+.level-info{flex:1;}
+.level-label{font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;}
+.xp-label{font-size:12px;color:var(--text2);margin-top:2px;}
+.xp-bar-wrap{margin-bottom:8px;}
+.xp-bar-top{display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:6px;}
+.xp-bar{height:10px;background:var(--bg3);border-radius:5px;overflow:hidden;position:relative;}
+.xp-fill{height:100%;background:linear-gradient(90deg,var(--purple),var(--blue),var(--cyan));border-radius:5px;transition:width .8s cubic-bezier(.4,0,.2,1);position:relative;}
+.xp-fill::after{content:'';position:absolute;top:0;left:0;right:0;height:50%;background:rgba(255,255,255,.15);border-radius:5px;}
+.xp-to-next{font-size:11px;color:var(--text3);text-align:center;}
+.mission-box{background:rgba(123,47,255,.1);border:1px solid rgba(123,47,255,.2);border-radius:10px;padding:10px 14px;margin-top:12px;}
+.mission-label{font-size:9px;letter-spacing:2px;color:var(--purple);text-transform:uppercase;margin-bottom:4px;}
+.mission-text{font-size:13px;font-weight:600;}
+.eta-text{font-size:11px;color:var(--text2);margin-top:2px;}
+
+/* STREAK */
+.streak-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;}
+.streak-title{font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px;}
+.streak-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
+.streak-item{text-align:center;}
+.streak-icon{font-size:20px;margin-bottom:4px;}
+.streak-name{font-size:9px;color:var(--text3);}
+.streak-count{font-size:13px;font-weight:700;color:var(--gold);}
+.streak-item.active .streak-icon{filter:drop-shadow(0 0 6px #ff6600);}
+.streak-item.inactive .streak-icon{filter:grayscale(1) opacity(.4);}
+
+/* QUICK LOG */
+.quick-log{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;}
+.quick-log-title{font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px;}
+.xp-chips{display:flex;flex-wrap:wrap;gap:8px;}
+.xp-chip{background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:6px 12px;font-size:12px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:4px;white-space:nowrap;}
+.xp-chip:hover,.xp-chip:active{background:rgba(123,47,255,.2);border-color:var(--purple);}
+.xp-chip .xp-amount{color:var(--gold);font-size:10px;font-weight:700;}
+
+/* STATS */
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px;}
+.stat-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.stat-row:last-child{margin-bottom:0;}
+.stat-name{font-size:12px;color:var(--text2);width:130px;flex-shrink:0;}
+.stat-bar{flex:1;height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;}
+.stat-fill{height:100%;border-radius:4px;transition:width .8s cubic-bezier(.4,0,.2,1);}
+.stat-val{font-size:12px;font-weight:700;width:30px;text-align:right;flex-shrink:0;}
+.stat-fill.s1{background:linear-gradient(90deg,#7b2fff,#00cfff);}
+.stat-fill.s2{background:linear-gradient(90deg,#ff6b35,#ffd700);}
+.stat-fill.s3{background:linear-gradient(90deg,#00ff88,#00cfff);}
+.stat-fill.s4{background:linear-gradient(90deg,#ff3355,#ff6b35);}
+.section-label{font-size:10px;letter-spacing:2px;color:var(--purple);text-transform:uppercase;margin:20px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+
+/* QUESTS */
+.quest-tabs{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px;}
+.quest-tab{padding:6px 14px;border-radius:20px;font-size:12px;border:1px solid var(--border);background:var(--bg3);cursor:pointer;white-space:nowrap;transition:all .2s;color:var(--text2);}
+.quest-tab.active{background:var(--purple);border-color:var(--purple);color:#fff;}
+.quest-item{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:flex-start;gap:12px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;}
+.quest-item.done{opacity:.5;}
+.quest-item.done::after{content:'✓';position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:20px;color:var(--green);}
+.quest-item:hover{border-color:var(--purple);}
+.quest-check{width:22px;height:22px;border-radius:6px;border:2px solid var(--border);flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;transition:all .2s;}
+.quest-item.done .quest-check{background:var(--green);border-color:var(--green);}
+.quest-info{flex:1;}
+.quest-name{font-size:13px;font-weight:600;margin-bottom:4px;}
+.quest-desc{font-size:11px;color:var(--text2);}
+.quest-xp{font-size:12px;color:var(--gold);font-weight:700;margin-top:4px;}
+.quest-type-badge{font-size:9px;padding:2px 6px;border-radius:4px;font-weight:700;letter-spacing:1px;}
+.badge-daily{background:rgba(0,207,255,.15);color:var(--cyan);}
+.badge-weekly{background:rgba(123,47,255,.2);color:#b86fff;}
+.badge-story{background:rgba(255,215,0,.15);color:var(--gold);}
+.badge-hidden{background:rgba(255,51,85,.15);color:var(--red);}
+
+/* SKILL TREE */
+.skill-tree{padding:0;}
+.skill-node{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;position:relative;}
+.skill-node.locked{opacity:.4;}
+.skill-node.mastered{border-color:var(--gold);box-shadow:0 0 12px rgba(255,215,0,.2);}
+.skill-node.unlocked{border-color:var(--purple);}
+.skill-icon{font-size:24px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:var(--bg3);border-radius:10px;}
+.skill-info{flex:1;}
+.skill-name{font-size:14px;font-weight:600;}
+.skill-sub{font-size:11px;color:var(--text2);margin-top:2px;}
+.skill-status{font-size:10px;padding:3px 8px;border-radius:4px;font-weight:700;letter-spacing:1px;}
+.status-locked{background:rgba(90,90,128,.2);color:var(--text3);}
+.status-unlocked{background:rgba(123,47,255,.2);color:var(--purple);}
+.status-mastered{background:rgba(255,215,0,.15);color:var(--gold);}
+.tree-connector{width:2px;height:16px;background:linear-gradient(var(--purple),var(--border));margin:0 auto 0 35px;}
+
+/* BOSS */
+.boss-card{background:linear-gradient(135deg,#120a0a,#1a0a0a);border:1px solid #2a1010;border-radius:16px;padding:16px;margin-bottom:12px;position:relative;overflow:hidden;}
+.boss-card.locked{opacity:.4;filter:grayscale(.5);}
+.boss-card::before{content:'';position:absolute;top:0;right:0;width:80px;height:80px;background:radial-gradient(circle,rgba(255,51,85,.1),transparent 70%);}
+.boss-name{font-size:16px;font-weight:700;margin-bottom:4px;}
+.boss-sub{font-size:11px;color:var(--text2);margin-bottom:12px;}
+.boss-prep-bar{height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin-bottom:6px;}
+.boss-prep-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--red),var(--gold));}
+.boss-stats{display:flex;gap:12px;font-size:11px;color:var(--text2);}
+.boss-stat strong{color:var(--text);}
+.boss-difficulty{position:absolute;top:16px;right:16px;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;}
+.diff-hard{background:rgba(255,51,85,.2);color:var(--red);}
+.diff-extreme{background:rgba(255,107,53,.2);color:#ff6b35;}
+.diff-legendary{background:rgba(255,215,0,.2);color:var(--gold);}
+
+/* INVENTORY */
+.inv-section{margin-bottom:20px;}
+.inv-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.inv-item{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;}
+.inv-icon{font-size:24px;margin-bottom:6px;}
+.inv-name{font-size:12px;font-weight:600;margin-bottom:4px;}
+.inv-stars{color:var(--gold);font-size:14px;}
+.inv-desc{font-size:10px;color:var(--text2);margin-top:4px;}
+.stars-empty{color:var(--text3);}
+
+/* LOG */
+.log-list{max-height:300px;overflow-y:auto;}
+.log-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:12px;}
+.log-item:last-child{border-bottom:none;}
+.log-act{color:var(--text2);}
+.log-xp{color:var(--gold);font-weight:700;}
+.log-time{color:var(--text3);font-size:10px;}
+
+/* NOTIFICATION */
+.notif{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-100px);background:linear-gradient(135deg,var(--bg2),var(--bg3));border:1px solid var(--purple);border-radius:12px;padding:16px 20px;z-index:200;min-width:280px;max-width:340px;box-shadow:var(--glow);transition:transform .4s cubic-bezier(.4,0,.2,1);}
+.notif.show{transform:translateX(-50%) translateY(0);}
+.notif-title{font-size:10px;letter-spacing:3px;color:var(--purple);text-transform:uppercase;margin-bottom:6px;}
+.notif-main{font-size:14px;font-weight:700;margin-bottom:8px;}
+.notif-gains{font-size:12px;color:var(--gold);}
+.notif-level{font-size:11px;color:var(--text2);margin-top:4px;}
+
+/* BUTTONS */
+.btn{padding:10px 20px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s;}
+.btn-primary{background:linear-gradient(135deg,var(--purple),var(--blue));color:#fff;}
+.btn-primary:hover{opacity:.85;box-shadow:var(--glow);}
+.btn-sm{padding:6px 12px;font-size:11px;border-radius:6px;}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2);}
+.btn-ghost:hover{border-color:var(--purple);color:var(--purple);}
+
+/* INPUT */
+.input-group{margin-bottom:12px;}
+.input-label{font-size:11px;color:var(--text2);margin-bottom:6px;display:block;}
+.input,.select,.textarea{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;outline:none;transition:border-color .2s;}
+.input:focus,.select:focus,.textarea:focus{border-color:var(--purple);}
+.select option{background:var(--bg3);}
+
+/* COACH */
+.coach-card{background:linear-gradient(135deg,#0a0a15,#0d0a20);border:1px solid rgba(123,47,255,.3);border-radius:16px;padding:18px;margin-bottom:16px;}
+.coach-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.coach-avatar{font-size:28px;}
+.coach-title{font-size:13px;font-weight:700;}
+.coach-sub{font-size:11px;color:var(--text2);}
+.coach-msg{font-size:13px;line-height:1.6;color:var(--text2);background:var(--bg3);border-radius:8px;padding:12px;border-left:3px solid var(--purple);}
+.coach-task{display:flex;align-items:center;gap:8px;padding:8px;background:rgba(123,47,255,.08);border-radius:8px;margin-top:8px;font-size:12px;}
+.roi-bar{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:4px;}
+.roi-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--gold));border-radius:2px;}
+
+/* HEAT MAP */
+.heat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;}
+.heat-item{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;}
+.heat-area{font-size:12px;font-weight:600;margin-bottom:6px;}
+.heat-bar-wrap{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;}
+.heat-fill{height:100%;border-radius:3px;}
+.heat-weak{background:linear-gradient(90deg,var(--red),#ff6b35);}
+.heat-mid{background:linear-gradient(90deg,#ff6b35,var(--gold));}
+.heat-strong{background:linear-gradient(90deg,var(--gold),var(--green));}
+.heat-score{font-size:10px;color:var(--text3);margin-top:4px;}
+.heat-priority{font-size:9px;letter-spacing:1px;margin-top:3px;font-weight:700;}
+.priority-high{color:var(--red);}
+.priority-med{color:var(--gold);}
+.priority-low{color:var(--green);}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:150;display:none;align-items:center;justify-content:center;padding:20px;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:20px;width:100%;max-width:360px;max-height:80vh;overflow-y:auto;}
+.modal-title{font-size:14px;font-weight:700;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;}
+.modal-close{cursor:pointer;color:var(--text3);font-size:20px;background:none;border:none;color:var(--text3);}
+
+/* RANK PATH */
+.rank-path{display:flex;align-items:center;gap:4px;margin-bottom:16px;overflow-x:auto;padding:4px;}
+.rank-dot{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;border:2px solid var(--border);}
+.rank-dot.current{background:linear-gradient(135deg,var(--purple),var(--blue));border-color:var(--purple);box-shadow:var(--glow);}
+.rank-dot.done{background:var(--bg3);border-color:var(--green);color:var(--green);}
+.rank-dot.future{color:var(--text3);}
+.rank-arrow{color:var(--text3);flex-shrink:0;}
+
+/* REWARD POP */
+@keyframes levelUp{0%{transform:translateX(-50%) scale(.5);opacity:0}50%{transform:translateX(-50%) scale(1.1)}100%{transform:translateX(-50%) scale(1);opacity:1}}
+.level-up-pop{position:fixed;top:30%;left:50%;transform:translateX(-50%);z-index:300;text-align:center;background:linear-gradient(135deg,#1a0a30,#0a1a40);border:2px solid var(--gold);border-radius:20px;padding:30px 40px;box-shadow:0 0 60px rgba(255,215,0,.4);display:none;}
+.level-up-pop.show{display:block;animation:levelUp .5s ease-out;}
+.lu-title{font-size:11px;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:8px;}
+.lu-level{font-size:60px;font-weight:900;background:linear-gradient(135deg,var(--gold),var(--gold2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+.lu-msg{font-size:14px;color:var(--text2);margin-top:8px;}
+
+/* PROFILE AVATAR */
+.avatar{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--blue));display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;flex-shrink:0;box-shadow:var(--glow);}
+
+/* utils */
+.flex{display:flex;} .items-center{align-items:center;} .gap-8{gap:8px;} .gap-12{gap:12px;} .mb-8{margin-bottom:8px;} .mb-12{margin-bottom:12px;} .mb-16{margin-bottom:16px;}
+.text-gold{color:var(--gold);} .text-purple{color:var(--purple);} .text-green{color:var(--green);} .text-red{color:var(--red);} .text-2{color:var(--text2);}
+.fw-7{font-weight:700;} .fs-11{font-size:11px;} .fs-12{font-size:12px;} .fs-13{font-size:13px;}
+</style>
+</head>
+<body>
+
+<!-- LEVEL UP POPUP -->
+<div class="level-up-pop" id="levelUpPop">
+  <div class="lu-title">⚔ LEVEL UP ⚔</div>
+  <div class="lu-level" id="luLevel">28</div>
+  <div class="lu-msg">You have grown stronger, Hunter.</div>
+</div>
+
+<!-- NOTIFICATION -->
+<div class="notif" id="notif">
+  <div class="notif-title">⚔ Quest Completed</div>
+  <div class="notif-main" id="notifMain">LeetCode Medium Solved</div>
+  <div class="notif-gains" id="notifGains">+50 XP · DSA +2</div>
+  <div class="notif-level" id="notifLevel">Total XP: 7470 / 9000</div>
+</div>
+
+<!-- MODAL: Log Activity -->
+<div class="modal-overlay" id="logModal">
+  <div class="modal">
+    <div class="modal-title">
+      Log Activity
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="input-group">
+      <label class="input-label">Activity Type</label>
+      <select class="select" id="actType">
+        <option value="leetcode-easy">LeetCode Easy (+20 XP)</option>
+        <option value="leetcode-medium">LeetCode Medium (+50 XP)</option>
+        <option value="leetcode-hard">LeetCode Hard (+120 XP)</option>
+        <option value="gym">Gym Workout (+25 XP)</option>
+        <option value="github-commit">GitHub Commit (+30 XP)</option>
+        <option value="system-design">System Design Study (+60 XP)</option>
+        <option value="kafka-learning">Kafka / Backend Learning (+40 XP)</option>
+        <option value="resume">Resume Improvement (+40 XP)</option>
+        <option value="blog">Blog Post (+80 XP)</option>
+        <option value="interview">Interview (+150 XP)</option>
+        <option value="job-application">Job Application (+15 XP)</option>
+        <option value="wake-early">Wake Before Target (+20 XP)</option>
+        <option value="project">Complete Project (+500 XP)</option>
+        <option value="offer">Job Offer (+1000 XP)</option>
+        <option value="hussein">Read Hussein Nasser (+30 XP)</option>
+        <option value="custom">Custom...</option>
+      </select>
+    </div>
+    <div class="input-group" id="customFields" style="display:none">
+      <label class="input-label">Activity Name</label>
+      <input class="input" id="customName" placeholder="What did you do?">
+      <label class="input-label" style="margin-top:8px">XP Amount</label>
+      <input class="input" id="customXP" type="number" placeholder="50" value="50">
+    </div>
+    <div class="input-group">
+      <label class="input-label">Notes (optional)</label>
+      <textarea class="textarea" id="actNotes" rows="2" placeholder="Any notes about this activity..."></textarea>
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="logActivity()">⚡ Claim XP</button>
+  </div>
+</div>
+
+<!-- PAGES -->
+
+<!-- ═══ DASHBOARD ═══ -->
+<div class="page active" id="page-home">
+  <p class="page-title">Hunter Dashboard</p>
+
+  <!-- Hunter Card -->
+  <div class="hunter-card">
+    <div class="hunter-top">
+      <div>
+        <div class="hunter-name">Khubaib</div>
+        <div class="hunter-sub">Backend Engineer · Jio Platforms</div>
+      </div>
+      <div class="rank-badge">
+        <div class="rank-letter" id="rankLetter">D</div>
+        <div class="rank-label">RANK</div>
+      </div>
+    </div>
+
+    <!-- Rank Path -->
+    <div class="rank-path" id="rankPath"></div>
+
+    <!-- Level -->
+    <div class="level-row">
+      <div class="level-num" id="levelDisplay">27</div>
+      <div class="level-info">
+        <div class="level-label">Current Level</div>
+        <div class="xp-label" id="xpLabelSmall">7,420 / 9,000 XP</div>
+      </div>
+    </div>
+
+    <!-- XP Bar -->
+    <div class="xp-bar-wrap">
+      <div class="xp-bar-top">
+        <span>Career XP</span>
+        <span id="xpPercent">82%</span>
+      </div>
+      <div class="xp-bar">
+        <div class="xp-fill" id="xpFill" style="width:82%"></div>
+      </div>
+    </div>
+    <div class="xp-to-next" id="xpToNext">580 XP to Level 28</div>
+
+    <!-- Mission -->
+    <div class="mission-box">
+      <div class="mission-label">Current Mission</div>
+      <div class="mission-text">Become SDE-2 at Top Product Company</div>
+      <div class="eta-text">⏱ ETA: 65 Days</div>
+    </div>
+  </div>
+
+  <!-- Streaks -->
+  <div class="streak-card">
+    <div class="streak-title">Today's Streak</div>
+    <div class="streak-grid" id="streakGrid"></div>
+  </div>
+
+  <!-- Quick XP Log -->
+  <div class="quick-log">
+    <div class="quick-log-title">Quick Log</div>
+    <div class="xp-chips">
+      <span class="xp-chip" onclick="quickLog('leetcode-easy')">LC Easy <span class="xp-amount">+20</span></span>
+      <span class="xp-chip" onclick="quickLog('leetcode-medium')">LC Medium <span class="xp-amount">+50</span></span>
+      <span class="xp-chip" onclick="quickLog('leetcode-hard')">LC Hard <span class="xp-amount">+120</span></span>
+      <span class="xp-chip" onclick="quickLog('gym')">Gym <span class="xp-amount">+25</span></span>
+      <span class="xp-chip" onclick="quickLog('github-commit')">Commit <span class="xp-amount">+30</span></span>
+      <span class="xp-chip" onclick="quickLog('system-design')">System Design <span class="xp-amount">+60</span></span>
+      <span class="xp-chip" onclick="openModal()">⚡ More...</span>
+    </div>
+  </div>
+
+  <!-- Activity Log -->
+  <div class="stat-card">
+    <div class="streak-title">Recent Activity</div>
+    <div class="log-list" id="logList"></div>
+  </div>
+</div>
+
+<!-- ═══ STATS ═══ -->
+<div class="page" id="page-stats">
+  <p class="page-title">Stats</p>
+
+  <!-- Heat Map -->
+  <div class="section-label">Career Heat Map — Priority Areas</div>
+  <div class="heat-grid" id="heatGrid"></div>
+
+  <div class="section-label">Backend Engineering</div>
+  <div class="stat-card" id="statsBackend"></div>
+
+  <div class="section-label">Soft Skills & Career</div>
+  <div class="stat-card" id="statsSoft"></div>
+</div>
+
+<!-- ═══ QUESTS ═══ -->
+<div class="page" id="page-quests">
+  <p class="page-title">Quests</p>
+  <div class="quest-tabs">
+    <button class="quest-tab active" onclick="setQuestTab('daily',this)">Daily</button>
+    <button class="quest-tab" onclick="setQuestTab('weekly',this)">Weekly</button>
+    <button class="quest-tab" onclick="setQuestTab('story',this)">Main Story</button>
+    <button class="quest-tab" onclick="setQuestTab('hidden',this)">Hidden</button>
+  </div>
+  <div id="questList"></div>
+</div>
+
+<!-- ═══ SKILL TREE ═══ -->
+<div class="page" id="page-skills">
+  <p class="page-title">Skill Tree</p>
+  <div id="skillTree"></div>
+</div>
+
+<!-- ═══ BOSS / INVENTORY ═══ -->
+<div class="page" id="page-more">
+  <p class="page-title">Arsenal</p>
+
+  <div class="section-label">⚔ Boss Battles — Target Companies</div>
+  <div id="bossList"></div>
+
+  <div class="section-label">🗡 Equipment</div>
+  <div class="inv-grid" id="equipGrid"></div>
+
+  <div class="section-label">📦 Inventory</div>
+  <div class="inv-grid" id="invGrid"></div>
+
+  <div class="section-label">🧠 AI Coach</div>
+  <div class="coach-card" id="coachCard"></div>
+
+  <div style="margin-top:16px;display:flex;gap:8px;">
+    <button class="btn btn-ghost btn-sm" onclick="exportData()">📤 Export Data</button>
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importFile').click()">📥 Import</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+    <button class="btn btn-ghost btn-sm" onclick="resetDay()">🌅 New Day</button>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav class="nav">
+  <button class="nav-btn active" onclick="showPage('home',this)">
+    <span class="icon">⚔</span>Home
+  </button>
+  <button class="nav-btn" onclick="showPage('stats',this)">
+    <span class="icon">📊</span>Stats
+  </button>
+  <button class="nav-btn" onclick="showPage('quests',this)">
+    <span class="icon">📜</span>Quests
+  </button>
+  <button class="nav-btn" onclick="showPage('skills',this)">
+    <span class="icon">🌳</span>Skills
+  </button>
+  <button class="nav-btn" onclick="showPage('more',this)">
+    <span class="icon">🏆</span>Arsenal
+  </button>
+</nav>
+
+<script>
+// ═══════════════════════════════════════════
+// DATA MODEL
+// ═══════════════════════════════════════════
+
+const XP_TABLE = {
+  'leetcode-easy': {xp:20, label:'LeetCode Easy', stat:'dsa'},
+  'leetcode-medium': {xp:50, label:'LeetCode Medium', stat:'dsa'},
+  'leetcode-hard': {xp:120, label:'LeetCode Hard', stat:'dsa'},
+  'gym': {xp:25, label:'Gym Workout', stat:'health'},
+  'github-commit': {xp:30, label:'GitHub Commit', stat:'github'},
+  'system-design': {xp:60, label:'System Design Study', stat:'systemDesign'},
+  'kafka-learning': {xp:40, label:'Kafka Learning', stat:'kafka'},
+  'resume': {xp:40, label:'Resume Improvement', stat:'resume'},
+  'blog': {xp:80, label:'Blog Post', stat:'networking'},
+  'interview': {xp:150, label:'Interview', stat:'communication'},
+  'job-application': {xp:15, label:'Job Application', stat:'networking'},
+  'wake-early': {xp:20, label:'Woke Early', stat:'discipline'},
+  'project': {xp:500, label:'Project Completed', stat:'github'},
+  'offer': {xp:1000, label:'Job Offer Received', stat:'communication'},
+  'hussein': {xp:30, label:'Read Hussein Nasser', stat:'systemDesign'},
+};
+
+const DEFAULT_STATE = {
+  hunter: {name:'Khubaib', level:27, currentXP:7420, nextLevelXP:9000, rank:'D', totalXP:47420},
+  stats: {
+    java:75, springBoot:68, kafka:38, go:22, systemDesign:42,
+    distributedSystems:33, dsa:55, communication:62, leadership:40,
+    consistency:50, discipline:52, health:45, networking:28, resume:58,
+    github:48, linkedin:55
+  },
+  streaks: {leetcode:0, gym:0, github:0, learning:0, applications:0},
+  streakDates: {leetcode:'', gym:'', github:'', learning:'', applications:''},
+  quests: {
+    daily: [
+      {id:'d1', name:'Solve a LeetCode Problem', desc:'Any difficulty counts', xp:30, done:false, type:'daily'},
+      {id:'d2', name:'Workout', desc:'Gym, run, or home workout', xp:25, done:false, type:'daily'},
+      {id:'d3', name:'1 Hour Deep Study', desc:'Backend, system design, or DSA', xp:35, done:false, type:'daily'},
+      {id:'d4', name:'GitHub Commit', desc:'Code, notes, or project', xp:30, done:false, type:'daily'},
+      {id:'d5', name:'Sleep 7+ Hours', desc:'Recovery is part of the grind', xp:15, done:false, type:'daily'},
+      {id:'d6', name:'No Junk Food', desc:'Fuel the machine correctly', xp:10, done:false, type:'daily'},
+    ],
+    weekly: [
+      {id:'w1', name:'System Design Deep Dive', desc:'Study one system design topic fully', xp:80, done:false, type:'weekly'},
+      {id:'w2', name:'Apply to 10 Jobs', desc:'Quality > quantity, but volume matters', xp:60, done:false, type:'weekly'},
+      {id:'w3', name:'Resume Update', desc:'Add a new bullet or improve existing', xp:50, done:false, type:'weekly'},
+      {id:'w4', name:'LinkedIn Post', desc:'Share learning or insight publicly', xp:70, done:false, type:'weekly'},
+      {id:'w5', name:'Mock Interview', desc:'Peer or self mock technical interview', xp:100, done:false, type:'weekly'},
+    ],
+    story: [
+      {id:'s1', name:'Crack a Product Company Interview', desc:'Get shortlisted at Google, Uber, Amazon, or similar', xp:500, done:false, type:'story'},
+      {id:'s2', name:'Reach LeetCode 200 Solved', desc:'Foundation of algorithmic thinking', xp:300, done:false, type:'story'},
+      {id:'s3', name:'Complete System Design Series', desc:'Master Grokking or Hussein Nasser course', xp:400, done:false, type:'story'},
+      {id:'s4', name:'Build & Deploy a Project', desc:'Something real. Something you can show.', xp:500, done:false, type:'story'},
+      {id:'s5', name:'Land SDE-2 Offer', desc:'The final boss. The goal.', xp:2000, done:false, type:'story'},
+    ],
+    hidden: [
+      {id:'h1', name:'???', desc:'Contribute something unexpected at work', xp:200, done:false, type:'hidden', locked:true},
+      {id:'h2', name:'???', desc:'Get a referral from a senior engineer', xp:300, done:false, type:'hidden', locked:true},
+      {id:'h3', name:'???', desc:'Help another engineer debug a hard problem', xp:150, done:false, type:'hidden', locked:true},
+    ]
+  },
+  activityLog: [],
+  lastResetDate: ''
+};
+
+let state = loadState();
+let currentQuestTab = 'daily';
+
+function loadState() {
+  try {
+    const s = localStorage.getItem('hunterDashboard_v2');
+    if (s) return JSON.parse(s);
+  } catch(e){}
+  return JSON.parse(JSON.stringify(DEFAULT_STATE));
+}
+
+function saveState() {
+  localStorage.setItem('hunterDashboard_v2', JSON.stringify(state));
+}
+
+// ═══════════════════════════════════════════
+// LEVEL SYSTEM
+// ═══════════════════════════════════════════
+
+const RANKS = ['E','D','C','B','A','S','National','Monarch'];
+const RANK_THRESHOLDS = [0, 10, 20, 35, 50, 70, 90, 100]; // levels
+
+function getLevelXP(level) {
+  return Math.floor(1000 * Math.pow(1.15, level - 1));
+}
+
+function getRank(level) {
+  for (let i = RANK_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (level >= RANK_THRESHOLDS[i]) return RANKS[i];
+  }
+  return 'E';
+}
+
+function addXP(amount, label, stat) {
+  const h = state.hunter;
+  h.currentXP += amount;
+  h.totalXP += amount;
+  let leveled = false;
+
+  while (h.currentXP >= h.nextLevelXP) {
+    h.currentXP -= h.nextLevelXP;
+    h.level++;
+    h.nextLevelXP = getLevelXP(h.level + 1);
+    h.rank = getRank(h.level);
+    leveled = true;
+  }
+
+  if (stat && state.stats[stat] !== undefined) {
+    const gain = Math.min(100, state.stats[stat] + Math.ceil(amount / 25));
+    state.stats[stat] = gain;
+  }
+
+  state.activityLog.unshift({
+    label: label || 'Activity',
+    xp: amount,
+    time: new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),
+    date: new Date().toLocaleDateString()
+  });
+  if (state.activityLog.length > 100) state.activityLog.pop();
+
+  saveState();
+  renderAll();
+
+  if (leveled) {
+    showLevelUp(h.level);
+  } else {
+    showNotif(label || 'Activity', `+${amount} XP`, `${h.currentXP.toLocaleString()} / ${h.nextLevelXP.toLocaleString()} XP`);
+  }
+}
+
+// ═══════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════
+
+function renderAll() {
+  renderHunterCard();
+  renderStreaks();
+  renderLog();
+  renderStats();
+  renderHeatMap();
+  renderQuests();
+  renderSkillTree();
+  renderBosses();
+  renderEquipment();
+  renderInventory();
+  renderCoach();
+}
+
+function renderHunterCard() {
+  const h = state.hunter;
+  const pct = Math.round((h.currentXP / h.nextLevelXP) * 100);
+
+  document.getElementById('levelDisplay').textContent = h.level;
+  document.getElementById('rankLetter').textContent = h.rank;
+  document.getElementById('xpLabelSmall').textContent = `${h.currentXP.toLocaleString()} / ${h.nextLevelXP.toLocaleString()} XP`;
+  document.getElementById('xpFill').style.width = pct + '%';
+  document.getElementById('xpPercent').textContent = pct + '%';
+  document.getElementById('xpToNext').textContent = `${(h.nextLevelXP - h.currentXP).toLocaleString()} XP to Level ${h.level + 1}`;
+
+  // Rank path
+  const rp = document.getElementById('rankPath');
+  rp.innerHTML = '';
+  RANKS.forEach((r, i) => {
+    const done = RANK_THRESHOLDS[i+1] && h.level >= RANK_THRESHOLDS[i+1];
+    const current = h.rank === r;
+    const dot = document.createElement('div');
+    dot.className = 'rank-dot ' + (done ? 'done' : current ? 'current' : 'future');
+    dot.textContent = r === 'National' ? 'N' : r === 'Monarch' ? 'M' : r;
+    dot.title = r;
+    rp.appendChild(dot);
+    if (i < RANKS.length - 1) {
+      const arr = document.createElement('span');
+      arr.className = 'rank-arrow';
+      arr.textContent = '→';
+      rp.appendChild(arr);
+    }
+  });
+}
+
+function renderStreaks() {
+  const STREAK_DEF = [
+    {key:'leetcode', icon:'📚', name:'LeetCode'},
+    {key:'gym', icon:'💪', name:'Gym'},
+    {key:'github', icon:'💻', name:'GitHub'},
+    {key:'learning', icon:'🧠', name:'Study'},
+    {key:'applications', icon:'📨', name:'Apply'},
+  ];
+  const grid = document.getElementById('streakGrid');
+  grid.innerHTML = '';
+  STREAK_DEF.forEach(s => {
+    const count = state.streaks[s.key] || 0;
+    const active = count > 0;
+    const div = document.createElement('div');
+    div.className = 'streak-item ' + (active ? 'active' : 'inactive');
+    div.innerHTML = `<div class="streak-icon">${s.icon}</div>
+      <div class="streak-name">${s.name}</div>
+      <div class="streak-count">${count > 0 ? count + '🔥' : '—'}</div>`;
+    div.onclick = () => bumpStreak(s.key, s.name);
+    grid.appendChild(div);
+  });
+}
+
+function bumpStreak(key, name) {
+  const today = new Date().toLocaleDateString();
+  if (state.streakDates[key] !== today) {
+    state.streakDates[key] = today;
+    state.streaks[key] = (state.streaks[key] || 0) + 1;
+    const bonus = state.streaks[key] >= 7 ? 100 : 10;
+    addXP(bonus, `${name} Streak Day ${state.streaks[key]}`, 'consistency');
+  } else {
+    showNotif('Already logged!', `${name} streak active today`, '');
+  }
+}
+
+function renderLog() {
+  const list = document.getElementById('logList');
+  if (!state.activityLog.length) {
+    list.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px 0">No activity yet. Start logging!</div>';
+    return;
+  }
+  list.innerHTML = state.activityLog.slice(0,20).map(l =>
+    `<div class="log-item">
+      <div><span class="log-act">${l.label}</span><div class="log-time">${l.date} ${l.time}</div></div>
+      <span class="log-xp">+${l.xp} XP</span>
+    </div>`
+  ).join('');
+}
+
+const STAT_DEFS = [
+  {key:'java', name:'Java', cls:'s1'},
+  {key:'springBoot', name:'Spring Boot', cls:'s1'},
+  {key:'kafka', name:'Kafka', cls:'s2'},
+  {key:'go', name:'Go / Golang', cls:'s2'},
+  {key:'systemDesign', name:'System Design', cls:'s3'},
+  {key:'distributedSystems', name:'Distributed Systems', cls:'s3'},
+  {key:'dsa', name:'DSA / Algorithms', cls:'s1'},
+];
+const SOFT_DEFS = [
+  {key:'communication', name:'Communication', cls:'s2'},
+  {key:'leadership', name:'Leadership', cls:'s2'},
+  {key:'consistency', name:'Consistency', cls:'s3'},
+  {key:'discipline', name:'Discipline', cls:'s3'},
+  {key:'health', name:'Health', cls:'s4'},
+  {key:'networking', name:'Networking', cls:'s2'},
+  {key:'resume', name:'Resume', cls:'s1'},
+  {key:'github', name:'GitHub Profile', cls:'s3'},
+  {key:'linkedin', name:'LinkedIn', cls:'s2'},
+];
+
+function renderStatGroup(defs, containerId) {
+  const c = document.getElementById(containerId);
+  c.innerHTML = defs.map(d => {
+    const v = state.stats[d.key] || 0;
+    return `<div class="stat-row">
+      <span class="stat-name">${d.name}</span>
+      <div class="stat-bar"><div class="stat-fill ${d.cls}" style="width:${v}%"></div></div>
+      <span class="stat-val">${v}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderStats() {
+  renderStatGroup(STAT_DEFS, 'statsBackend');
+  renderStatGroup(SOFT_DEFS, 'statsSoft');
+}
+
+function renderHeatMap() {
+  const allStats = [...STAT_DEFS, ...SOFT_DEFS];
+  const sorted = allStats
+    .map(d => ({...d, val: state.stats[d.key] || 0}))
+    .sort((a,b) => a.val - b.val)
+    .slice(0, 6);
+
+  const grid = document.getElementById('heatGrid');
+  grid.innerHTML = sorted.map(d => {
+    const cls = d.val < 40 ? 'heat-weak' : d.val < 65 ? 'heat-mid' : 'heat-strong';
+    const pri = d.val < 40 ? 'HIGH PRIORITY' : d.val < 65 ? 'MEDIUM' : 'GOOD';
+    const priCls = d.val < 40 ? 'priority-high' : d.val < 65 ? 'priority-med' : 'priority-low';
+    return `<div class="heat-item">
+      <div class="heat-area">${d.name}</div>
+      <div class="heat-bar-wrap"><div class="heat-fill ${cls}" style="width:${d.val}%"></div></div>
+      <div class="heat-score">${d.val}/100</div>
+      <div class="heat-priority ${priCls}">${pri}</div>
+    </div>`;
+  }).join('');
+}
+
+const QUEST_DEFS_ALL = {
+  daily: 'badge-daily',
+  weekly: 'badge-weekly',
+  story: 'badge-story',
+  hidden: 'badge-hidden'
+};
+
+function renderQuests() {
+  const list = document.getElementById('questList');
+  const quests = state.quests[currentQuestTab] || [];
+  list.innerHTML = quests.map(q => {
+    const badge = QUEST_DEFS_ALL[q.type] || 'badge-daily';
+    const locked = q.locked && !q.done;
+    return `<div class="quest-item ${q.done ? 'done' : ''}" onclick="${locked ? '' : `toggleQuest('${q.type}','${q.id}')`}">
+      <div class="quest-check">${q.done ? '✓' : ''}</div>
+      <div class="quest-info">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <span class="quest-name">${locked ? '???' : q.name}</span>
+          <span class="quest-type-badge ${badge}">${q.type.toUpperCase()}</span>
+        </div>
+        <div class="quest-desc">${locked ? 'Complete other quests to unlock' : q.desc}</div>
+        <div class="quest-xp">⚡ ${q.xp} XP</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleQuest(type, id) {
+  const q = state.quests[type].find(x => x.id === id);
+  if (!q || q.done) return;
+  q.done = true;
+
+  // Streak bonus
+  const streakBonus = checkQuestStreakBonus(type);
+  addXP(q.xp + streakBonus, q.name, null);
+  if (streakBonus > 0) {
+    setTimeout(() => showNotif('Streak Bonus!', `All ${type} quests done!`, `+${streakBonus} bonus XP`), 1500);
+  }
+}
+
+function checkQuestStreakBonus(type) {
+  const all = state.quests[type];
+  if (all.every(q => q.done)) return 100;
+  return 0;
+}
+
+function setQuestTab(tab, el) {
+  currentQuestTab = tab;
+  document.querySelectorAll('.quest-tab').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderQuests();
+}
+
+const SKILL_NODES = [
+  {name:'Java Fundamentals', sub:'OOP, Collections, Streams', icon:'☕', status:'mastered'},
+  {name:'Spring Boot', sub:'REST, Security, JPA', icon:'🍃', status:'unlocked'},
+  {name:'Microservices', sub:'Design patterns, API Gateway', icon:'🔧', status:'unlocked'},
+  {name:'Apache Kafka', sub:'Topics, consumers, producers', icon:'⚡', status:'unlocked'},
+  {name:'Redis', sub:'Caching, pub/sub, data structures', icon:'🔴', status:'locked'},
+  {name:'Docker', sub:'Containers, compose, networking', icon:'🐳', status:'locked'},
+  {name:'Kubernetes', sub:'Orchestration, deployments', icon:'⎈', status:'locked'},
+  {name:'AWS / Cloud', sub:'EC2, S3, RDS, Lambda', icon:'☁', status:'locked'},
+  {name:'System Design', sub:'HLD, LLD, trade-offs', icon:'🏗', status:'unlocked'},
+  {name:'Distributed Systems', sub:'CAP, consistency, consensus', icon:'🌐', status:'locked'},
+];
+
+function renderSkillTree() {
+  const tree = document.getElementById('skillTree');
+  tree.innerHTML = SKILL_NODES.map((n, i) =>
+    `${i > 0 ? '<div class="tree-connector"></div>' : ''}
+    <div class="skill-node ${n.status}">
+      <div class="skill-icon">${n.icon}</div>
+      <div class="skill-info">
+        <div class="skill-name">${n.name}</div>
+        <div class="skill-sub">${n.sub}</div>
+      </div>
+      <span class="skill-status status-${n.status}">${n.status.toUpperCase()}</span>
+    </div>`
+  ).join('');
+}
+
+const BOSSES = [
+  {name:'Meesho', sub:'E-commerce Backend · SDE-2', prep:62, diff:'Hard', diffCls:'diff-hard', locked:false, weakness:'System Design, DSA'},
+  {name:'Razorpay', sub:'Fintech Backend · SDE-2', prep:55, diff:'Hard', diffCls:'diff-hard', locked:false, weakness:'Distributed Systems, Java'},
+  {name:'Amazon', sub:'SDE-2 · LLD & System Design', prep:38, diff:'Extreme', diffCls:'diff-extreme', locked:true, weakness:'LLD, Leadership Principles'},
+  {name:'Uber', sub:'Senior Backend Engineer', prep:28, diff:'Extreme', diffCls:'diff-extreme', locked:true, weakness:'Distributed Systems, Go'},
+  {name:'Google', sub:'L4 Software Engineer', prep:18, diff:'Legendary', diffCls:'diff-legendary', locked:true, weakness:'DSA, System Design, Algo'},
+  {name:'Microsoft', sub:'SDE-2 Azure/Backend', prep:30, diff:'Extreme', diffCls:'diff-extreme', locked:true, weakness:'LLD, Behavioral'},
+];
+
+function renderBosses() {
+  const list = document.getElementById('bossList');
+  list.innerHTML = BOSSES.map(b =>
+    `<div class="boss-card ${b.locked ? 'locked' : ''}">
+      <div class="boss-difficulty ${b.diffCls}">${b.diff}</div>
+      <div class="boss-name">${b.name}</div>
+      <div class="boss-sub">${b.sub}</div>
+      <div class="boss-prep-bar"><div class="boss-prep-fill" style="width:${b.prep}%"></div></div>
+      <div class="boss-stats">
+        <span>Prep: <strong>${b.prep}%</strong></span>
+        <span>Weakness: <strong>${b.weakness}</strong></span>
+      </div>
+      ${b.locked ? '<div style="font-size:11px;color:var(--text3);margin-top:8px">🔒 Reach 60% prep to unlock</div>' : ''}
+    </div>`
+  ).join('');
+}
+
+const EQUIPMENT = [
+  {name:'Resume', icon:'📄', stars:3, maxStars:5, desc:'Add more STAR stories & metrics'},
+  {name:'LinkedIn', icon:'💼', stars:4, maxStars:5, desc:'Strong but needs more posts'},
+  {name:'GitHub Profile', icon:'💻', stars:3, maxStars:5, desc:'Pin projects, improve activity'},
+  {name:'Portfolio', icon:'🌐', stars:2, maxStars:5, desc:'Not built yet — high value'},
+  {name:'LeetCode', icon:'🧩', stars:3, maxStars:5, desc:'Hit 250+ to unlock S rank'},
+  {name:'System Design', icon:'🏗', stars:2, maxStars:5, desc:'Critical weak point — study hard'},
+];
+
+function renderEquipment() {
+  const grid = document.getElementById('equipGrid');
+  grid.innerHTML = EQUIPMENT.map(e =>
+    `<div class="inv-item">
+      <div class="inv-icon">${e.icon}</div>
+      <div class="inv-name">${e.name}</div>
+      <div class="inv-stars">
+        ${'★'.repeat(e.stars)}<span class="stars-empty">${'★'.repeat(e.maxStars - e.stars)}</span>
+      </div>
+      <div class="inv-desc">${e.desc}</div>
+    </div>`
+  ).join('');
+}
+
+const INVENTORY_ITEMS = [
+  {name:'Achievements', icon:'🏅', desc:'2 unlocked', count:2},
+  {name:'Projects Built', icon:'🔨', desc:'Blockchain + Backend', count:2},
+  {name:'STAR Stories', icon:'⭐', desc:'Add more for interviews', count:3},
+  {name:'Design Docs', icon:'📐', desc:'Start writing these', count:0},
+  {name:'Books Finished', icon:'📚', desc:'Add technical books', count:1},
+  {name:'Certificates', icon:'🎓', desc:'None yet — consider AWS', count:0},
+];
+
+function renderInventory() {
+  const grid = document.getElementById('invGrid');
+  grid.innerHTML = INVENTORY_ITEMS.map(i =>
+    `<div class="inv-item">
+      <div class="inv-icon">${i.icon}</div>
+      <div class="inv-name">${i.name}</div>
+      <div style="font-size:20px;font-weight:700;color:var(--purple);margin:4px 0">${i.count}</div>
+      <div class="inv-desc">${i.desc}</div>
+    </div>`
+  ).join('');
+}
+
+const COACH_MESSAGES = [
+  "Your System Design score is your biggest bottleneck. Every hour studying HLD is 3x ROI compared to another LeetCode medium. Make it today's focus.",
+  "Consistency is the only cheat code. You don't need to be the smartest — you need to show up every day. Log something. Anything. Keep the streak alive.",
+  "Kafka and distributed systems are what separate SDE-1 from SDE-2 candidates. You're at 38% — one hour today closes that gap visibly.",
+  "Apply to Meesho and Razorpay this week. Your prep is above 50% for both. Waiting until you're 'ready' is a trap. Apply. Learn from rejections.",
+  "Your Java is strong at 75. Leverage it — build something with Spring Boot + Kafka this weekend. It becomes a resume bullet AND 500 XP.",
+];
+
+function renderCoach() {
+  const card = document.getElementById('coachCard');
+  const msg = COACH_MESSAGES[new Date().getDay() % COACH_MESSAGES.length];
+  const weakStat = [...STAT_DEFS, ...SOFT_DEFS].sort((a,b) => (state.stats[a.key]||0) - (state.stats[b.key]||0))[0];
+  card.innerHTML = `
+    <div class="coach-header">
+      <div class="coach-avatar">🤖</div>
+      <div>
+        <div class="coach-title">The System — Daily Briefing</div>
+        <div class="coach-sub">${new Date().toLocaleDateString('en-IN', {weekday:'long', month:'short', day:'numeric'})}</div>
+      </div>
+    </div>
+    <div class="coach-msg">${msg}</div>
+    <div class="coach-task" style="margin-top:12px">
+      <span>🎯</span>
+      <div>
+        <div style="font-weight:600">Today's Priority: ${weakStat ? weakStat.name : 'System Design'}</div>
+        <div class="roi-bar" style="margin-top:4px"><div class="roi-fill" style="width:85%"></div></div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px">85% ROI — highest impact right now</div>
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════
+// QUICK LOG & MODAL
+// ═══════════════════════════════════════════
+
+function quickLog(type) {
+  const def = XP_TABLE[type];
+  if (!def) return;
+  addXP(def.xp, def.label, def.stat);
+
+  // Update streak if applicable
+  if (type === 'github-commit') bumpStreakSilent('github');
+  if (type.startsWith('leetcode')) bumpStreakSilent('leetcode');
+  if (type === 'gym') bumpStreakSilent('gym');
+  if (type === 'system-design' || type === 'kafka-learning' || type === 'hussein') bumpStreakSilent('learning');
+  if (type === 'job-application') bumpStreakSilent('applications');
+}
+
+function bumpStreakSilent(key) {
+  const today = new Date().toLocaleDateString();
+  if (state.streakDates[key] !== today) {
+    state.streakDates[key] = today;
+    state.streaks[key] = (state.streaks[key] || 0) + 1;
+    saveState();
+    renderStreaks();
+  }
+}
+
+function openModal() {
+  document.getElementById('logModal').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('logModal').classList.remove('open');
+}
+
+document.getElementById('actType').addEventListener('change', function() {
+  document.getElementById('customFields').style.display = this.value === 'custom' ? 'block' : 'none';
+});
+
+function logActivity() {
+  const type = document.getElementById('actType').value;
+  let xp, label, stat;
+
+  if (type === 'custom') {
+    label = document.getElementById('customName').value || 'Custom Activity';
+    xp = parseInt(document.getElementById('customXP').value) || 50;
+    stat = null;
+  } else {
+    const def = XP_TABLE[type];
+    xp = def.xp; label = def.label; stat = def.stat;
+    quickLog(type);
+    closeModal();
+    return;
+  }
+
+  addXP(xp, label, stat);
+  closeModal();
+}
+
+// ═══════════════════════════════════════════
+// NOTIFICATIONS
+// ═══════════════════════════════════════════
+
+let notifTimer;
+function showNotif(main, gains, level) {
+  clearTimeout(notifTimer);
+  document.getElementById('notifMain').textContent = main;
+  document.getElementById('notifGains').textContent = gains;
+  document.getElementById('notifLevel').textContent = level;
+  const n = document.getElementById('notif');
+  n.classList.add('show');
+  notifTimer = setTimeout(() => n.classList.remove('show'), 3000);
+}
+
+function showLevelUp(level) {
+  document.getElementById('luLevel').textContent = level;
+  const pop = document.getElementById('levelUpPop');
+  pop.classList.add('show');
+  setTimeout(() => pop.classList.remove('show'), 3500);
+}
+
+// ═══════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════
+
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  el.classList.add('active');
+}
+
+// ═══════════════════════════════════════════
+// DATA EXPORT / IMPORT
+// ═══════════════════════════════════════════
+
+function exportData() {
+  const data = JSON.stringify(state, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `hunter-save-${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  showNotif('Data Exported', 'Save file downloaded', 'Import on any device to sync');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      state = imported;
+      saveState();
+      renderAll();
+      showNotif('Data Imported', 'Your save has been loaded', `Level ${state.hunter.level} Hunter`);
+    } catch(err) {
+      alert('Invalid save file.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function resetDay() {
+  const today = new Date().toLocaleDateString();
+  if (state.lastResetDate === today) {
+    showNotif('Already reset today', 'Day was already started', '');
+    return;
+  }
+  state.lastResetDate = today;
+  // Reset daily quests
+  state.quests.daily.forEach(q => q.done = false);
+  saveState();
+  renderAll();
+  showNotif('New Day Started', 'Daily quests reset', `Day ${state.activityLog.length + 1} of your journey`);
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+
+renderAll();
+</script>
+</body>
+</html>
