@@ -262,6 +262,17 @@ checks:
 The sandbox image (`sandbox/Dockerfile`) adds the Claude Code native binary, pinned to a version and checked against
 the SHA-512 the npm registry publishes for it.
 
+## Security and operations (M6)
+
+| Area | How |
+|------|-----|
+| Sign-in | `FACTORY_SECURITY`: `github` (OAuth app, allow list `FACTORY_ALLOWED_USERS`), `basic` (admin account) or `none` (fake mode only; real mode refuses to start without sign-in). `SecurityConfig`, `SecurityProperties` |
+| CSRF | On for every dashboard POST; Thymeleaf puts the token in `th:action` forms. Exempt: `/webhooks/github` (HMAC) and `/api/fake/**` (fake mode) |
+| Open without sign-in | `/actuator/health`, `/webhooks/github`, the login pages, static files; actuator endpoints on the management port |
+| Webhooks | `GitHubWebhookController`: HMAC-SHA256 (`X-Hub-Signature-256`, constant-time compare), only the configured repo. `issues` → coalesced poll; `pull_request_review` / closed `pull_request` → `JobQueue.wakeUp` for the ticket waiting on that PR. Never changes state directly |
+| Metrics | Management port 8081: `factory_jobs{status}`, `factory_tickets{state}` (from the database), `factory_tickets_finished_total{outcome}`, `factory_guardrail_trips_total{guardrail}`, `factory_lease_losses_total`, `factory_worker_errors_total`, `factory_step_seconds{step}`, `factory_agent_run_seconds{success}`, `factory_agent_cost_usd_total`, `factory_agent_tokens_total{direction}`, `factory_agent_turns_total`, plus JVM and HTTP metrics |
+| Logs | `[t:<ticket> j:<job>]` on every line written while a job runs (MDC, copied to the agent's thread); one INFO line per state change |
+
 ## Fakes
 
 Each fake takes its behavior from three places, in priority order:
@@ -299,4 +310,4 @@ enforces the policy too, so a Phase 2 client must call it as well.
 5. ~~A switch `factory.integrations=fake|real`~~: done in M0; real implementations register in `RealIntegrationsConfig`.
 6. A reviewer agent before AWAITING_APPROVAL, and "changes requested" back to CODING. That needs a new
    AWAITING_APPROVAL → CODING transition, which is deliberately not allowed today.
-7. Authentication on the dashboard and its POST actions (none in Phase 1).
+7. ~~Authentication on the dashboard and its POST actions~~: done in M6.

@@ -40,7 +40,7 @@ mvn clean verify
 ```
 
 The tests need Docker: Testcontainers starts a real PostgreSQL 16, because the job queue depends on Postgres-only
-features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 356 tests in about a minute (the sandbox tests start real containers). CI
+features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 383 tests in about a minute (the sandbox tests start real containers). CI
 (`.github/workflows/factory-ci.yml`) runs the same command on every push and pull request.
 
 ## What is built vs. not built
@@ -63,7 +63,8 @@ features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 356 test
 | Real agent (`ClaudeCodeAgentRunner`): Claude Code headless in the sandbox with the ticket's remaining turn and cost budget, only Bash/Read/Edit/Write, usage parsed from its stream, cancel kills it and everything it started; reaches the model API only through a per-ticket proxy that adds the credential, so the sandbox never holds it | Built (M5), tested with the real CLI against a scripted model API on every build; live evaluation is a manual workflow |
 | Real GitHub client (`GitHubRestClient`): GitHub App or token auth, complete paged issue listing, ETag caching, trigger time and labeler permission from label events, idempotent PR opening, review-based approval, rate-limit handling | Built (M2), tested against a GitHub API simulator on every build and against real GitHub nightly (passing) |
 | Real checks (`SandboxChecksRunner`): the repo's check command from `.factory.yml` on the base branch (read on the host, so the agent can't change it), run in the sandbox with a timeout that kills the whole process tree, output capped at 64 K characters keeping start and end | Built (M4), tested on real Docker with a sample repo that has a known failing test |
-| Reviewer agent, auth on the dashboard, metrics export | **Not built** |
+| Dashboard sign-in (GitHub OAuth with an allow list, or one admin account) and CSRF protection; GitHub webhooks (signed) with polling as fallback; Prometheus metrics on a separate port; ticket and job ids in every log line; paged ticket list | Built (M6); load-tested at 1,000 tickets |
+| Reviewer agent, "changes requested" back to the agent, multiple repos | **Not built** |
 
 ## Configuration
 
@@ -89,7 +90,13 @@ Everything is set through environment variables; see [`.env.example`](.env.examp
 | `FACTORY_HARD_TIMEOUT` | `PT30M` | Wall-clock limit per ticket (time waiting for approval is not counted) |
 | `FACTORY_MAX_RETRIES` | `3` | Retries for failed steps and failed checks, combined |
 | `FACTORY_WORKER_THREADS` | `2` | Workers per app instance (you can run several instances safely) |
-| `SPRING_PROFILES_ACTIVE` | none | `demo` seeds data |
+| `FACTORY_SECURITY` | none in fake mode | `github`, `basic` or `none` (fake mode only). Real mode needs `github` or `basic` |
+| `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `FACTORY_ALLOWED_USERS` | none | `github` sign-in: a GitHub OAuth app (callback `<url>/login/oauth2/code/github`) and the logins allowed in |
+| `FACTORY_ADMIN_USER`, `FACTORY_ADMIN_PASSWORD` | `admin`, none | `basic` sign-in (password at least 12 characters) |
+| `GITHUB_WEBHOOK_SECRET` | none | Enables `POST /webhooks/github` (events: issues, pull_request, pull_request_review; JSON) |
+| `MANAGEMENT_PORT` | `8081` | Health and Prometheus metrics (`/actuator/prometheus`); not published by docker-compose |
+| `FACTORY_APPROVAL_POLL_INTERVAL` | `PT1M` | How often a ticket waiting for approval checks GitHub (webhooks make it immediate) |
+| `SPRING_PROFILES_ACTIVE` | none | `demo` seeds data; `dev` turns template caching off |
 
 There are no secrets in the repo; all of them come from the environment.
 
@@ -97,8 +104,10 @@ There are no secrets in the repo; all of them come from the environment.
 
 1. Build the sandbox image (git, a shell, Python and the Claude Code CLI; add your repo's toolchain to the
    Dockerfile): `docker build -t factory-sandbox:latest sandbox`
-2. In `.env`: `FACTORY_INTEGRATIONS=real`, `FACTORY_REPO`, GitHub credentials (App or token), and one of
-   `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`.
+2. In `.env`: `FACTORY_INTEGRATIONS=real`, `FACTORY_REPO`, GitHub credentials (App or token), one of
+   `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`, and dashboard sign-in (`FACTORY_SECURITY=github` with an OAuth
+   app and `FACTORY_ALLOWED_USERS`, or `basic` with `FACTORY_ADMIN_PASSWORD`). Optional: `GITHUB_WEBHOOK_SECRET`,
+   with a webhook on the repo pointing at `<url>/webhooks/github`.
 3. Uncomment the Docker socket mount in `docker-compose.yml` (read the warning there), then `docker compose up --build`.
 4. Add `.factory.yml` to the target repo (next section) and label an issue `factory`.
 

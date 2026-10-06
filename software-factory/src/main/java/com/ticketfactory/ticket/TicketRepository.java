@@ -73,12 +73,29 @@ public class TicketRepository {
                 .param("repo", repo).query(TICKET).list();
     }
 
+    /** The ticket waiting for approval on this PR, if any (webhooks find their ticket this way). */
+    public Optional<Ticket> findAwaitingApproval(String repo, int prNumber) {
+        return jdbc.sql("SELECT * FROM tickets WHERE repo = :repo AND pr_number = :pr AND state = 'AWAITING_APPROVAL'")
+                .param("repo", repo).param("pr", prNumber).query(TICKET).optional();
+    }
+
     public Optional<Ticket> findById(long id) {
         return jdbc.sql("SELECT * FROM tickets WHERE id = :id").param("id", id).query(TICKET).optional();
     }
 
     public Ticket get(long id) {
         return findById(id).orElseThrow(() -> new IllegalArgumentException("No ticket " + id));
+    }
+
+    /** Newest first, {@code limit} rows starting at {@code offset}, optionally only one state. */
+    public List<Ticket> findPage(TicketState stateFilter, int offset, int limit) {
+        if (stateFilter == null) {
+            return jdbc.sql("SELECT * FROM tickets ORDER BY created_at DESC, id DESC LIMIT :limit OFFSET :offset")
+                    .param("limit", limit).param("offset", offset).query(TICKET).list();
+        }
+        return jdbc.sql("SELECT * FROM tickets WHERE state = :state ORDER BY created_at DESC, id DESC"
+                        + " LIMIT :limit OFFSET :offset")
+                .param("state", stateFilter.name()).param("limit", limit).param("offset", offset).query(TICKET).list();
     }
 
     public List<Ticket> findAll(TicketState stateFilter, int limit) {

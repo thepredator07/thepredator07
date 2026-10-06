@@ -28,7 +28,9 @@ public class FakeApprovalController {
 
     @PostMapping("/tickets/{id}/approve")
     public String approve(@PathVariable long id, RedirectAttributes redirect) {
-        Ticket t = tickets.get(id);
+        Ticket t = tickets.findById(id).orElseThrow(
+                () -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND));
         if (t.state() != TicketState.AWAITING_APPROVAL || t.prNumber() == null) {
             redirect.addFlashAttribute("message", "Only tickets awaiting approval can be approved.");
         } else {

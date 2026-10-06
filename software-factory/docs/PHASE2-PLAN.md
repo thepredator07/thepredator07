@@ -164,7 +164,7 @@ engineer; they are rough.
 | **M3** ✅ | **Docker sandbox** (done, see below) | `DockerSandboxRunner`: one container per attempt, named `factory-<id>`, idempotent, resource limits, non-root, egress allowlist, no secrets inside; janitor for orphans | Contract and security tests pass on real Docker in CI; killing the app mid-step leaves no orphan after the janitor runs | 4–5 days |
 | **M4** ✅ | **Real checks** (done, see below) | `SandboxChecksRunner`: per-repo check command from config (e.g. `.factory.yml`), output truncation, timeout | Passes and fails correctly on a sample repo with a known failing test | 1–2 days |
 | **M5** ✅ | **Claude Code agent** (done; live evaluation passed, see below) | `ClaudeCodeAgentRunner`: headless run in the sandbox with `--max-turns`, usage parsed into `AgentResult`, cancellation kills the process (finding 5), feedback loop from failed checks | Agent eval: at least 6 of 10 fixture issues reach DONE within limits; guardrails trip correctly on a deliberately oversized ticket; cancel stops spending within 10s | 4–6 days |
-| **M6** | **Security and operations** | Dashboard auth + CSRF (finding 8); metrics and MDC (finding 10); webhooks with polling fallback (finding 12); production config (finding 14) | Security tests pass; Prometheus shows queue depth, cost and outcomes; one load test run at 1,000 tickets | 3–4 days |
+| **M6** ✅ | **Security and operations** (done, see below) | Dashboard auth + CSRF (finding 8); metrics and MDC (finding 10); webhooks with polling fallback (finding 12); production config (finding 14) | Security tests pass; Prometheus shows queue depth, cost and outcomes; one load test run at 1,000 tickets | 3–4 days |
 | **M7** | **Pilot** | Run on one real low-risk repo with a small daily cost cap; reviewer agent and changes-requested edge (finding 13) can follow here | Two weeks of real tickets; success rate, cost per ticket and failure reasons reviewed weekly; no double runs, no leaked sandboxes, no secret exposure | 2 weeks elapsed |
 
 Order matters: M0 first (it removes the defects that would corrupt every later test), contracts before any real
@@ -279,6 +279,35 @@ proper one failed after the 30 s git timeout, as expected.
   PR diff, and the human approval is the gate; protected paths could be added later.
 - Checks don't watch for cancellation while running; a cancelled ticket notices after the checks finish (at most the
   checks timeout). Cancellation that stops running processes is part of M5 (finding 5).
+
+## M6 status: done
+
+| Item | What changed | Proven by |
+|------|--------------|-----------|
+| Dashboard sign-in (finding 8) | Spring Security, `FACTORY_SECURITY=github` (GitHub OAuth app; only logins in `FACTORY_ALLOWED_USERS`), `basic` (one admin account, form or HTTP Basic) or `none` (fake mode only). Real mode refuses to start without sign-in; bad settings (no allow list, short password, missing OAuth app) fail at startup with the fix in the message | `GitHubSignInTest` (2), `BasicSignInTest` (7), `SecurityPropertiesTest` (5), checked by hand with the packaged app |
+| CSRF (finding 8) | Every dashboard POST needs the token (Thymeleaf adds it to forms). Exempt: the webhook (signature-checked) and the fake-mode `/api/fake/**` | `DashboardControllerTest.actionsWithoutACsrfTokenAreRefused`, `ticketPageFormsCarryTheCsrfToken`, `BasicSignInTest.signedInActionsStillNeedTheCsrfToken` |
+| Audit | A dashboard cancel records who did it in the ticket history; a missing ticket gives 404 instead of 500 | `DashboardControllerTest`, `BasicSignInTest` |
+| Webhooks (finding 12) | `POST /webhooks/github`, HMAC-SHA256 signature checked in constant time, 404 without a secret. `issues` events trigger a (coalesced) poll; reviews and PR closes wake the waiting ticket's job. Webhooks only speed things up: polling stays as the fallback and still applies every rule. Approval checks went from every 5 s to every minute | `GitHubWebhookTest` (6), `WebhookDisabledTest` (2) |
+| Metrics (finding 10) | Prometheus on a separate management port (8081, not published by docker-compose): queue depth and tickets per state (read from the database, so every instance agrees), finished tickets by outcome, guardrail trips, lease losses, worker errors, step and agent-run timers, agent cost, tokens and turns | `ManagementPortTest`: real server, metrics only on the management port, counts match what happened, dashboard still needs sign-in |
+| Logs (finding 10) | Ticket and job ids on every line written while a job runs (`[t:42 j:57]`), including the agent's thread; one line per state change | `ManagementPortTest` |
+| Production defaults (finding 14) | Template caching on except with the `dev` profile; ticket list paged (50 per page); indexes for the dashboard's queries (V3) | `DashboardControllerTest.theTicketListIsPaged`, `MigrationTest` |
+| Poller | Polls are serialized: a webhook-triggered poll and the scheduled one can't overlap and double-count a missing issue | Reasoned, not tested directly (decision 70) |
+
+**Load test (exit criterion "one load test run at 1,000 tickets"):** `ThousandTicketsLoadTest`, on every build. 1,000
+tickets through the whole pipeline (fakes) with 8 workers competing for the queue; one in ten has checks that fail
+once. Result: all 1,000 DONE in **8.5 s (118 tickets/s)**, exactly one job per ticket, the expected number of agent
+runs per ticket (1, or 2 after a failed check), 7,200 history rows as computed, no lease lost, no worker error.
+
+**Exit criteria:** security tests pass; Prometheus shows queue depth, cost and outcomes; the load test passes.
+
+Mutation check: CSRF off, the allow list skipped, everything open in `basic` mode, `none` allowed in real mode, the
+webhook signature or repository not checked, actuator endpoints open on the main port, the finished-ticket counter,
+the guardrail counter or the ticket id in the logs removed: each makes tests fail.
+
+**Known limits:**
+- One admin account in `basic` mode, and no roles: anyone allowed in can cancel any ticket.
+- Webhooks cover one repository, like the rest of the factory (multi-repo is finding 15).
+- The dashboard's stats still scan the tickets table on each view; fine to tens of thousands of tickets.
 
 ## M5 status: done
 

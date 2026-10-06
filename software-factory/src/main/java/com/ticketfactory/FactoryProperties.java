@@ -34,7 +34,7 @@ public record FactoryProperties(
             @DefaultValue("PT1S") Duration pollInterval,
             @DefaultValue("PT10M") Duration leaseTimeout,
             @DefaultValue("PT2S") Duration retryBackoff,
-            @DefaultValue("PT5S") Duration approvalPollInterval,
+            @DefaultValue("PT1M") Duration approvalPollInterval,
             @DefaultValue("5") int maxJobAttempts) {
     }
 

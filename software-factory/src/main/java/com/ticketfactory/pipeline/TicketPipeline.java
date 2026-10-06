@@ -8,6 +8,9 @@ import com.ticketfactory.integration.AgentRunner.AgentRequest;
 import com.ticketfactory.integration.AgentRunner.AgentResult;
 import com.ticketfactory.integration.BranchPolicy;
 import com.ticketfactory.integration.ChecksRunner;
+import com.ticketfactory.metrics.FactoryMetrics;
+import java.util.Map;
+import org.slf4j.MDC;
 import com.ticketfactory.integration.GitHubClient;
 import com.ticketfactory.integration.RateLimitedException;
 import com.ticketfactory.integration.SandboxRunner;
@@ -55,10 +58,13 @@ public class TicketPipeline implements JobHandler {
     private final FactoryProperties props;
     private final Clock clock;
     private final ExecutorService agentExecutor;
+    private final FactoryMetrics metrics;
 
     public TicketPipeline(TicketRepository tickets, TicketService transitions, GitHubClient github,
                           SandboxRunner sandbox, AgentRunner agent, ChecksRunner checks, FactoryProperties props,
-                          Clock clock, @Qualifier("agentExecutor") ExecutorService agentExecutor) {
+                          Clock clock, @Qualifier("agentExecutor") ExecutorService agentExecutor,
+                          FactoryMetrics metrics) {
+        this.metrics = metrics;
         this.tickets = tickets;
         this.transitions = transitions;
         this.github = github;
@@ -97,12 +103,20 @@ public class TicketPipeline implements JobHandler {
             }
             try {
                 checkTimeout(ticket);
-                if (step(ticket, context) instanceof Step.Wait w) {
+                long stepStarted = System.nanoTime();
+                Step result;
+                try {
+                    result = step(ticket, context);
+                } finally {
+                    metrics.stepTook(ticket.state(), Duration.ofNanos(System.nanoTime() - stepStarted));
+                }
+                if (result instanceof Step.Wait w) {
                     return JobOutcome.reschedule(w.delay(), w.note());
                 }
             } catch (LeaseLostException e) {
                 return JobOutcome.abandon(e.getMessage());
             } catch (GuardrailExceededException e) {
+                metrics.guardrailTripped(e.guardrail());
                 failQuietly(id, e.getMessage());
             } catch (RateLimitedException e) {
                 // Not the ticket's fault: wait for the limit to reset, without spending one of its retries.
@@ -153,22 +167,25 @@ public class TicketPipeline implements JobHandler {
         int turnsLeft = limits.maxTurns() - t.turns();
         BigDecimal budgetLeft = limits.maxCostUsd().subtract(t.costUsd());
         if (turnsLeft <= 0 || budgetLeft.signum() <= 0) {
-            throw new GuardrailExceededException("no budget left before agent run (turns used " + t.turns()
+            throw new GuardrailExceededException("budget", "no budget left before agent run (turns used " + t.turns()
                     + ", cost $" + t.costUsd() + ")");
         }
         AgentRequest request = new AgentRequest(context(t, t.branchName()), t.sandboxId(), prompt(t),
                 t.lastFeedback(), turnsLeft, budgetLeft);
 
+        long agentStarted = System.nanoTime();
         AgentResult result = callAgentWithTimeout(t, request, context);
+        metrics.agentRun(Duration.ofNanos(System.nanoTime() - agentStarted), result.success(), result.costUsd(),
+                result.inputTokens(), result.outputTokens(), result.turns());
         tickets.recordUsage(t.id(), result.inputTokens(), result.outputTokens(), result.costUsd(), result.turns());
 
         Ticket after = tickets.get(t.id());
         if (after.costUsd().compareTo(limits.maxCostUsd()) > 0) {
-            throw new GuardrailExceededException("cost $" + after.costUsd().setScale(2, RoundingMode.HALF_UP)
+            throw new GuardrailExceededException("cost", "cost $" + after.costUsd().setScale(2, RoundingMode.HALF_UP)
                     + " exceeded limit $" + limits.maxCostUsd().setScale(2, RoundingMode.HALF_UP));
         }
         if (after.turns() > limits.maxTurns()) {
-            throw new GuardrailExceededException("turns " + after.turns() + " exceeded limit " + limits.maxTurns());
+            throw new GuardrailExceededException("turns", "turns " + after.turns() + " exceeded limit " + limits.maxTurns());
         }
         if (!result.success()) {
             throw new StepFailedException(result.summary());
@@ -184,13 +201,23 @@ public class TicketPipeline implements JobHandler {
      */
     private AgentResult callAgentWithTimeout(Ticket t, AgentRequest request, JobContext context) {
         Instant deadline = clock.instant().plus(props.guardrails().hardTimeout().minus(elapsed(t)));
-        Future<AgentResult> future = agentExecutor.submit(() -> agent.run(request));
+        Map<String, String> mdc = MDC.getCopyOfContextMap(); // keep ticket and job ids in the agent's log lines
+        Future<AgentResult> future = agentExecutor.submit(() -> {
+            if (mdc != null) {
+                MDC.setContextMap(mdc);
+            }
+            try {
+                return agent.run(request);
+            } finally {
+                MDC.clear();
+            }
+        });
         try {
             while (true) {
                 long leftMs = Duration.between(clock.instant(), deadline).toMillis();
                 if (leftMs <= 0) {
                     future.cancel(true);
-                    throw new GuardrailExceededException("hard timeout " + props.guardrails().hardTimeout()
+                    throw new GuardrailExceededException("timeout", "hard timeout " + props.guardrails().hardTimeout()
                             + " reached while the agent was running");
                 }
                 try {
@@ -291,7 +318,7 @@ public class TicketPipeline implements JobHandler {
             return; // waiting on a human does not count against the agent's time budget
         }
         if (elapsed(t).compareTo(props.guardrails().hardTimeout()) > 0) {
-            throw new GuardrailExceededException("hard timeout " + props.guardrails().hardTimeout() + " exceeded");
+            throw new GuardrailExceededException("timeout", "hard timeout " + props.guardrails().hardTimeout() + " exceeded");
         }
     }
 

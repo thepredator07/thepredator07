@@ -27,6 +27,7 @@ services:
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "8080:8080"
+      # 8081 (metrics, health) is deliberately not published; scrape it from inside the Docker network.
     # Real mode (FACTORY_INTEGRATIONS=real) runs sandboxes and their model proxies through the host's Docker.
     # Build the sandbox image first (docker build -t factory-sandbox:latest sandbox), then uncomment both lines.
     # WARNING: access to the Docker socket is root-equivalent on the host. Run this only on a machine dedicated

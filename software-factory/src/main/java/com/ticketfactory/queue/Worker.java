@@ -5,6 +5,8 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import com.ticketfactory.metrics.FactoryMetrics;
 
 /**
  * Claims one job at a time and hands it to the {@link JobHandler}. Stateless between jobs; safe to run many in
@@ -20,9 +22,16 @@ public class Worker {
     private final String id;
     private final JobQueue queue;
     private final JobHandler handler;
+    private final FactoryMetrics metrics;
     private final FactoryProperties.Worker config;
 
     public Worker(String id, JobQueue queue, JobHandler handler, FactoryProperties.Worker config) {
+        this(id, queue, handler, config, FactoryMetrics.NOOP);
+    }
+
+    public Worker(String id, JobQueue queue, JobHandler handler, FactoryProperties.Worker config,
+                  FactoryMetrics metrics) {
+        this.metrics = metrics;
         this.id = id;
         this.queue = queue;
         this.handler = handler;
@@ -42,22 +51,28 @@ public class Worker {
         AtomicBoolean owned = new AtomicBoolean(true);
         Thread heartbeat = Thread.ofVirtual().name("heartbeat-" + id + "-job-" + job.id())
                 .start(() -> heartbeatLoop(job, owned));
+        // Every log line while this job runs says which ticket and job it is about.
+        MDC.put("ticketId", Long.toString(job.ticketId()));
+        MDC.put("jobId", Long.toString(job.id()));
         try {
             JobOutcome outcome = handler.handle(job, owned::get);
             boolean applied = switch (outcome) {
                 case JobOutcome.Complete c -> queue.complete(job);
                 case JobOutcome.Reschedule r -> queue.reschedule(job, r.delay(), r.note());
                 case JobOutcome.Abandon a -> {
+                    metrics.leaseLost();
                     log.warn("Worker {} abandoned job {} (ticket {}): {}", id, job.id(), job.ticketId(), a.reason());
                     yield true;
                 }
             };
             if (!applied) {
+                metrics.leaseLost();
                 log.warn("Worker {} lost the lease on job {} (ticket {}) before finishing; result discarded",
                         id, job.id(), job.ticketId());
             }
         } catch (RuntimeException e) {
             // The handler deals with expected step failures itself; this is a bug or an infrastructure error.
+            metrics.workerError();
             log.error("Worker {} crashed on job {} (ticket {})", id, job.id(), job.ticketId(), e);
             if (job.attempts() >= config.maxJobAttempts()) {
                 queue.fail(job, "gave up after " + job.attempts() + " attempts: " + e);
@@ -66,6 +81,8 @@ public class Worker {
             }
         } finally {
             heartbeat.interrupt();
+            MDC.remove("ticketId");
+            MDC.remove("jobId");
         }
         return true;
     }
