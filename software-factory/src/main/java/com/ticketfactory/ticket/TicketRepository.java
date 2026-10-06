@@ -33,7 +33,8 @@ public class TicketRepository {
     public Optional<Long> insertIfAbsent(String repo, int issueNumber, String title, String body, Instant now) {
         return jdbc.sql("""
                         INSERT INTO tickets (repo, issue_number, title, body, state, created_at, updated_at)
-                        VALUES (:repo, :issue, :title, :body, 'RECEIVED', :now, :now)
+                        SELECT :repo, :issue, :title, :body, 'RECEIVED', :now, :now
+                        WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE repo = :repo AND issue_number = :issue)
                         ON CONFLICT (repo, issue_number) DO NOTHING
                         RETURNING id""")
                 .param("repo", repo)

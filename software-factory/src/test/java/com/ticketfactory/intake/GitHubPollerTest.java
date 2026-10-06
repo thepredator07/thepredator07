@@ -62,5 +62,7 @@ class GitHubPollerTest extends AbstractIntegrationTest {
         github.addIssue(props.repo(), 2, "Second", "", props.triggerLabel());
         assertThat(poller.pollOnce()).isEqualTo(1);
         assertThat(tickets.count()).isEqualTo(2);
+        assertThat(tickets.findAll(null, 10)).extracting(Ticket::id)
+                .as("re-polling must not burn ids").containsExactlyInAnyOrder(1L, 2L);
     }
 }

@@ -127,7 +127,7 @@ class TicketPipelineTest extends PipelineTestSupport {
 
         Ticket t = ticket(id);
         assertThat(t.state()).isEqualTo(FAILED);
-        assertThat(t.failureReason()).startsWith("guardrail: cost $5").contains("limit $2");
+        assertThat(t.failureReason()).isEqualTo("guardrail: cost $5.00 exceeded limit $2.00");
         assertThat(agent.callCount(id)).isEqualTo(1);
         assertThat(t.retries()).isZero();
         assertThat(t.costUsd()).isEqualByComparingTo("5.00");

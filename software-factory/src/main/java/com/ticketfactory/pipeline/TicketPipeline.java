@@ -20,6 +20,7 @@ import com.ticketfactory.ticket.TicketRepository;
 import com.ticketfactory.ticket.TicketService;
 import com.ticketfactory.ticket.TicketService.ConcurrentTransitionException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
@@ -147,8 +148,8 @@ public class TicketPipeline implements JobHandler {
 
         Ticket after = tickets.get(t.id());
         if (after.costUsd().compareTo(limits.maxCostUsd()) > 0) {
-            throw new GuardrailExceededException("cost $" + after.costUsd() + " exceeded limit $"
-                    + limits.maxCostUsd());
+            throw new GuardrailExceededException("cost $" + after.costUsd().setScale(2, RoundingMode.HALF_UP)
+                    + " exceeded limit $" + limits.maxCostUsd().setScale(2, RoundingMode.HALF_UP));
         }
         if (after.turns() > limits.maxTurns()) {
             throw new GuardrailExceededException("turns " + after.turns() + " exceeded limit " + limits.maxTurns());
