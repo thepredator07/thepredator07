@@ -59,15 +59,56 @@ class IntegrationModeTest {
     }
 
     @Test
-    void realModeFailsFastWithAClearMessageBeforeAnythingAsksForAMissingClient() {
+    void realModeWithoutAModelCredentialFailsFastWithAClearMessage() {
         runner.withPropertyValues("factory.integrations=real")
                 .withBean(NeedsGitHub.class)
                 .run(ctx -> {
                     assertThat(ctx).hasFailed();
                     Throwable cause = NestedExceptionUtils.getMostSpecificCause(ctx.getStartupFailure());
-                    assertThat(cause).hasMessageContaining("factory.integrations=real is not implemented yet");
+                    assertThat(cause).hasMessageContaining("needs a model API credential")
+                            .hasMessageContaining("ANTHROPIC_API_KEY").hasMessageContaining("CLAUDE_CODE_OAUTH_TOKEN");
                     assertThat(cause.getMessage()).doesNotContain("No qualifying bean");
                 });
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @EnableConfigurationProperties({com.ticketfactory.integration.github.GitHubProperties.class,
+            com.ticketfactory.integration.docker.SandboxProperties.class,
+            com.ticketfactory.integration.checks.ChecksProperties.class,
+            com.ticketfactory.integration.agent.AgentProperties.class})
+    static class RealProps {
+        @org.springframework.context.annotation.Bean
+        java.time.Clock clock() {
+            return java.time.Clock.systemUTC();
+        }
+    }
+
+    @Test
+    void realModeWithACredentialWiresTheRealAgentChecksAndSandboxBehindTheProxy() {
+        runner.withUserConfiguration(RealProps.class)
+                .withPropertyValues("factory.integrations=real", "factory.github.token=ghp_test",
+                        "factory.agent.oauth-token=sk-ant-oat01-test-token")
+                .run(ctx -> {
+                    assertThat(ctx).hasNotFailed();
+                    assertThat(ctx.getBean(AgentRunner.class))
+                            .isInstanceOf(com.ticketfactory.integration.agent.ClaudeCodeAgentRunner.class);
+                    assertThat(ctx.getBean(ChecksRunner.class))
+                            .isInstanceOf(com.ticketfactory.integration.checks.SandboxChecksRunner.class);
+                    var sandbox = ctx.getBean(com.ticketfactory.integration.docker.DockerSandboxRunner.class);
+                    assertThat(sandbox.proxy()).isNotNull();
+                    assertThat(sandbox.proxy().mode())
+                            .isEqualTo(com.ticketfactory.integration.docker.ModelApiProxy.Mode.OAUTH_TOKEN);
+                    assertThat(ctx).doesNotHaveBean(FakeGitHubClient.class);
+                });
+    }
+
+    @Test
+    void anApiKeyIsPreferredOverASubscriptionToken() {
+        runner.withUserConfiguration(RealProps.class)
+                .withPropertyValues("factory.integrations=real", "factory.github.token=ghp_test",
+                        "factory.agent.oauth-token=sk-ant-oat01-test", "factory.agent.api-key=sk-ant-api03-test")
+                .run(ctx -> assertThat(ctx.getBean(com.ticketfactory.integration.docker.ModelApiProxy.class).mode())
+                        .isEqualTo(com.ticketfactory.integration.docker.ModelApiProxy.Mode.API_KEY));
     }
 
     @Test

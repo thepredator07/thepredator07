@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets;
  * Keeps the start and the end of a stream and drops the middle, in fixed memory however much a build prints. The start
  * shows what ran; the end usually holds the failure summary.
  */
-final class BoundedOutput extends OutputStream {
+public final class BoundedOutput extends OutputStream {
 
     private final byte[] head;
     private final byte[] tail; // ring buffer
@@ -15,7 +15,7 @@ final class BoundedOutput extends OutputStream {
     private long tailWritten;
     private long total;
 
-    BoundedOutput(int headBytes, int tailBytes) {
+    public BoundedOutput(int headBytes, int tailBytes) {
         head = new byte[headBytes];
         tail = new byte[tailBytes];
     }
@@ -43,7 +43,7 @@ final class BoundedOutput extends OutputStream {
         tailWritten += len;
     }
 
-    synchronized long totalBytes() {
+    public synchronized long totalBytes() {
         return total;
     }
 

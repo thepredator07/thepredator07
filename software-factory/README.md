@@ -1,13 +1,15 @@
-# Ticket-to-PR Software Factory (Phase 1)
+# Ticket-to-PR Software Factory
 
 A service that turns labeled GitHub issues into pull requests. It polls for issues with the `factory` label, creates
 a ticket for each one, and moves the ticket through a fixed pipeline: sandbox, coding agent, checks, pull request,
 human approval. Every step is recorded, along with tokens, cost, duration, retries and the final outcome. A dashboard
 shows the results.
 
-**Phase 1 uses fakes** for GitHub, the sandbox, the coding agent and the checks. That way the whole pipeline can be
-run, demonstrated and tested without Docker sandboxes, a GitHub token or LLM costs. The fakes can be told to succeed,
-fail, or fail N times and then succeed, so every path through the pipeline can be tested.
+It runs in two modes. **Fake mode** (the default) uses fakes for GitHub, the sandbox, the coding agent and the checks,
+so the whole pipeline can be run, demonstrated and tested without Docker sandboxes, a GitHub token or LLM costs. The
+fakes can be told to succeed, fail, or fail N times and then succeed. **Real mode** (`FACTORY_INTEGRATIONS=real`) uses
+real GitHub, a locked-down Docker sandbox per ticket, the target repo's own checks, and Claude Code as the agent (see
+"Real mode" below).
 
 ## Run it locally (3 commands)
 
@@ -38,7 +40,7 @@ mvn clean verify
 ```
 
 The tests need Docker: Testcontainers starts a real PostgreSQL 16, because the job queue depends on Postgres-only
-features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 326 tests in about a minute (the sandbox tests start real containers). CI
+features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 356 tests in about a minute (the sandbox tests start real containers). CI
 (`.github/workflows/factory-ci.yml`) runs the same command on every push and pull request.
 
 ## What is built vs. not built
@@ -58,7 +60,7 @@ features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 326 test
 | Demo profile with seeded and live tickets | Built |
 | Docker Compose (app + postgres), GitHub Actions CI | Built |
 | Docker sandbox (`DockerSandboxRunner`): one container per attempt, no network, no credentials, non-root, read-only root, all capabilities dropped, memory/CPU/process limits; code moves in and out as git bundles and the host pushes the branch; a janitor removes orphans | Built (M3), tested on real Docker |
-| Real Claude Code agent | **Not built** (Phase 2): stub in `integration/phase2/ClaudeCodeAgentRunner` |
+| Real agent (`ClaudeCodeAgentRunner`): Claude Code headless in the sandbox with the ticket's remaining turn and cost budget, only Bash/Read/Edit/Write, usage parsed from its stream, cancel kills it and everything it started; reaches the model API only through a per-ticket proxy that adds the credential, so the sandbox never holds it | Built (M5), tested with the real CLI against a scripted model API on every build; live evaluation is a manual workflow |
 | Real GitHub client (`GitHubRestClient`): GitHub App or token auth, complete paged issue listing, ETag caching, trigger time and labeler permission from label events, idempotent PR opening, review-based approval, rate-limit handling | Built (M2), tested against a GitHub API simulator on every build and against real GitHub nightly (passing) |
 | Real checks (`SandboxChecksRunner`): the repo's check command from `.factory.yml` on the base branch (read on the host, so the agent can't change it), run in the sandbox with a timeout that kills the whole process tree, output capped at 64 K characters keeping start and end | Built (M4), tested on real Docker with a sample repo that has a known failing test |
 | Reviewer agent, auth on the dashboard, metrics export | **Not built** |
@@ -70,11 +72,13 @@ Everything is set through environment variables; see [`.env.example`](.env.examp
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `FACTORY_INTEGRATIONS` | `fake` | `fake` (Phase 1) or `real` (Phase 2; fails at startup until the agent exists, M5) |
+| `FACTORY_INTEGRATIONS` | `fake` | `fake` or `real` |
+| `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` | none | Real mode needs one: an API key, or a Pro/Max subscription token from `claude setup-token`. Never enters a sandbox |
+| `FACTORY_AGENT_MODEL`, `FACTORY_AGENT_TOOLS` | CLI default, `Bash,Read,Edit,Write` | The agent's model and the tools it may use |
 | `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY_PATH` | none | Real GitHub via a GitHub App (recommended) |
 | `GITHUB_TOKEN` | none | Real GitHub via a token, if no App is configured |
 | `FACTORY_MIN_LABELER_PERMISSION` | `write` | Issues labeled by someone with less repo permission are ignored |
-| `FACTORY_SANDBOX_IMAGE`, `FACTORY_SANDBOX_MEMORY`, `FACTORY_SANDBOX_CPUS` | `buildpack-deps:bookworm-scm`, `4g`, `2.0` | Sandbox container (real mode) |
+| `FACTORY_SANDBOX_IMAGE`, `FACTORY_SANDBOX_MEMORY`, `FACTORY_SANDBOX_CPUS` | `factory-sandbox:latest`, `4g`, `2.0` | Sandbox container (real mode); build the image from `sandbox/Dockerfile` |
 | `FACTORY_CHECKS_DEFAULT_COMMAND` | none | Check command for repos without `.factory.yml` (real mode); without it such repos fail at once |
 | `FACTORY_CHECKS_DEFAULT_TIMEOUT`, `FACTORY_CHECKS_MAX_TIMEOUT` | `PT10M`, `PT30M` | Checks timeout when the repo sets none, and the most a repo may ask for |
 | `FACTORY_WORK_DIR` | `/var/lib/factory` | Host-side bare clones of target repos (real mode) |
@@ -87,7 +91,20 @@ Everything is set through environment variables; see [`.env.example`](.env.examp
 | `FACTORY_WORKER_THREADS` | `2` | Workers per app instance (you can run several instances safely) |
 | `SPRING_PROFILES_ACTIVE` | none | `demo` seeds data |
 
-There are no secrets in the repo. Phase 2 will read `GITHUB_TOKEN` and `ANTHROPIC_API_KEY` from the environment.
+There are no secrets in the repo; all of them come from the environment.
+
+## Real mode
+
+1. Build the sandbox image (git, a shell, Python and the Claude Code CLI; add your repo's toolchain to the
+   Dockerfile): `docker build -t factory-sandbox:latest sandbox`
+2. In `.env`: `FACTORY_INTEGRATIONS=real`, `FACTORY_REPO`, GitHub credentials (App or token), and one of
+   `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`.
+3. Uncomment the Docker socket mount in `docker-compose.yml` (read the warning there), then `docker compose up --build`.
+4. Add `.factory.yml` to the target repo (next section) and label an issue `factory`.
+
+**Live agent evaluation:** the "Software Factory agent evaluation" workflow (Actions tab, run by hand) puts the real
+agent through 10 fixture issues, an oversized ticket and a mid-run cancel, and writes a report to the job summary. It
+needs the `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` repository secret.
 
 ## Preparing a target repo (real mode)
 

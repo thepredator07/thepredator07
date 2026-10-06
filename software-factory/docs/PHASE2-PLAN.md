@@ -163,7 +163,7 @@ engineer; they are rough.
 | **M2** ✅ | **Real GitHub client** (done; live run passed, see below) | `GitHubRestClient` (GitHub App auth from env), issues by label with paging, labeler permission check, open or find PR, review status, comments; host-side push | Contract suite passes against WireMock on every push and against a live test repo nightly; rate limits handled | 3–4 days |
 | **M3** ✅ | **Docker sandbox** (done, see below) | `DockerSandboxRunner`: one container per attempt, named `factory-<id>`, idempotent, resource limits, non-root, egress allowlist, no secrets inside; janitor for orphans | Contract and security tests pass on real Docker in CI; killing the app mid-step leaves no orphan after the janitor runs | 4–5 days |
 | **M4** ✅ | **Real checks** (done, see below) | `SandboxChecksRunner`: per-repo check command from config (e.g. `.factory.yml`), output truncation, timeout | Passes and fails correctly on a sample repo with a known failing test | 1–2 days |
-| **M5** | **Claude Code agent** | `ClaudeCodeAgentRunner`: headless run in the sandbox with `--max-turns`, usage parsed into `AgentResult`, cancellation kills the process (finding 5), feedback loop from failed checks | Agent eval: at least 6 of 10 fixture issues reach DONE within limits; guardrails trip correctly on a deliberately oversized ticket; cancel stops spending within 10s | 4–6 days |
+| **M5** 🟡 | **Claude Code agent** (built; live evaluation pending, see below) | `ClaudeCodeAgentRunner`: headless run in the sandbox with `--max-turns`, usage parsed into `AgentResult`, cancellation kills the process (finding 5), feedback loop from failed checks | Agent eval: at least 6 of 10 fixture issues reach DONE within limits; guardrails trip correctly on a deliberately oversized ticket; cancel stops spending within 10s | 4–6 days |
 | **M6** | **Security and operations** | Dashboard auth + CSRF (finding 8); metrics and MDC (finding 10); webhooks with polling fallback (finding 12); production config (finding 14) | Security tests pass; Prometheus shows queue depth, cost and outcomes; one load test run at 1,000 tickets | 3–4 days |
 | **M7** | **Pilot** | Run on one real low-risk repo with a small daily cost cap; reviewer agent and changes-requested edge (finding 13) can follow here | Two weeks of real tickets; success rate, cost per ticket and failure reasons reviewed weekly; no double runs, no leaked sandboxes, no secret exposure | 2 weeks elapsed |
 
@@ -279,6 +279,52 @@ proper one failed after the 30 s git timeout, as expected.
   PR diff, and the human approval is the gate; protected paths could be added later.
 - Checks don't watch for cancellation while running; a cancelled ticket notices after the checks finish (at most the
   checks timeout). Cancellation that stops running processes is part of M5 (finding 5).
+
+## M5 status: built, live evaluation pending
+
+| Item | What changed | Proven by (no credential, every build) |
+|------|--------------|-----------------------------------------|
+| `ClaudeCodeAgentRunner` | `claude -p` headless in the sandbox: prompt (rules, issue, failed checks output) from a file, `--max-turns` and `--max-budget-usd` from the ticket's remaining budget, `--output-format stream-json` parsed as it streams, work committed on the ticket branch afterwards | `ClaudeCodeAgentRunnerTest` (8): the **real Claude Code CLI 2.1.291** in the real sandbox against a scripted model API |
+| Credential never in the sandbox (decision 59) | `ModelApiProxy`: per-ticket nginx that swaps a placeholder credential for the real one. API key and subscription token both supported | `ModelApiProxyTest.modelCallsGoThrough...`, `inOauthMode...`; `codeTheAgentRunsSeesOnlyThePlaceholderCredential` (a tool call dumps every process environment) |
+| Egress allowlist (moved here from M3) | Sandbox on its own internal network; the proxy is the only member, forwards `/v1/*` only, and runs only while the agent runs. Checks stop it again | `ModelApiProxyTest` (10): no direct route to the upstream, other hosts or the internet; 403 off `/v1/`; nothing reachable with the proxy stopped, including during checks |
+| Cancellation (finding 5) | The agent runs in its own session; cancel, timeout and lease loss kill the session and process group | `cancellingKillsTheAgentAndEverythingItStartedWithinTenSeconds` (runner) and `DockerAgentPipelineTest.cancellingTheTicketStopsTheAgentWithinTenSeconds` (pipeline): under 10 s, including a background process the agent started |
+| Feedback loop | Failed checks output goes into the next prompt | `DockerAgentPipelineTest.theRealCliFixesTheBugAfterTheChecksFailAndThePrHasTheFix`: real CLI, real checks, sample repo: fail → feedback → fix → PR |
+| Turn limit | The CLI stops at `--max-turns`; the run counts as failed | `theTurnLimitStopsTheAgentAndCountsAsFailure` |
+| Limited tools (decision 61) | `--tools Bash,Read,Edit,Write`, `--strict-mcp-config` | The model is offered exactly those four tools (checked in the recorded request) |
+| Sandbox image | `sandbox/Dockerfile`: Claude Code's native binary, pinned and checked against npm's published SHA-512 | Built in CI before the tests; a wrong checksum fails the build (checked by hand) |
+| Real mode complete | `RealIntegrationsConfig` wires the agent; startup fails clearly without `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`; an API key wins when both are set | `IntegrationModeTest` (6) |
+| Usage parsing | `StreamJsonParser`, against output recorded from the real CLI | `StreamJsonParserTest` (4) |
+
+**Exit criteria:**
+- *Cancel stops spending within 10 s*: met with the real CLI (scripted model), in the runner and through the
+  pipeline.
+- *Guardrails trip on a deliberately oversized ticket* and *at least 6 of 10 fixture issues reach DONE within limits*:
+  these need the real model. They are written (`AgentEvalTest`, `AgentGuardrailEvalTest`, tagged `agent-eval`) and run
+  by the manual workflow **"Software Factory agent evaluation"** with the `CLAUDE_CODE_OAUTH_TOKEN` (or
+  `ANTHROPIC_API_KEY`) secret. Not run yet: the workflow can only be started once it is on main. The ten fixtures are
+  checked on every build (`EvalFixturesTest`): each fails as written and passes with a reference fix, so a result
+  says something about the agent. A dry run of the harness against the scripted model API produced the report as
+  expected (0 of 10, since that model changes nothing).
+
+Two bugs were found by the tests while building this:
+- `setsid` forks when it is a process-group leader (as `docker exec` runs it), and without `--wait` it returned at
+  once. The runner then stopped watching a CLI that carried on in the background; quick runs only passed because
+  they finished within that window. The cancel test caught it; `--wait` fixes it (mutation-checked).
+- Claude Code's Bash tool cuts long plain `sleep` commands short by itself, which made the first cancel test
+  meaningless. The test now uses a Python sleep.
+
+Mutation check: `setsid` without `--wait`, no kill after the run, the proxy left running, the proxy not injecting
+the credential, a non-internal sandbox network, the proxy forwarding every path, all tools enabled, checks not
+stopping the proxy, the agent's work not committed, and a no-change run counted as success each make tests fail.
+
+**Known limits:**
+- A process the agent deliberately detaches with its own `setsid` survives the kill until the sandbox is removed at
+  the end of the ticket. It has no network (the proxy is stopped) but could still touch files before the checks.
+- The prompt tells the agent not to edit tests, and the evaluation checks it, but nothing enforces it in production;
+  the PR diff and the human approval are the gate.
+- With a subscription token, `--max-budget-usd` and the cost guardrail use the CLI's list-price estimate; the real
+  limit is the plan's usage allowance.
+- A run cut off before its final result (cancel, timeout) reports its turns and tokens but not its cost.
 
 ### M2 live run, attempt 1 (2026-10-06): 8 of 11 passed
 

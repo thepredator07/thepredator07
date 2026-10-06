@@ -54,11 +54,18 @@ factory:
     min-labeler-permission: ${FACTORY_MIN_LABELER_PERMISSION:write}
   # Docker sandbox (factory.integrations=real). Needs the Docker socket; see README.
   sandbox:
-    image: ${FACTORY_SANDBOX_IMAGE:buildpack-deps:bookworm-scm}
+    image: ${FACTORY_SANDBOX_IMAGE:factory-sandbox:latest}
     memory: ${FACTORY_SANDBOX_MEMORY:4g}
     cpus: ${FACTORY_SANDBOX_CPUS:2.0}
     host-work-dir: ${FACTORY_WORK_DIR:/var/lib/factory}
     clone-url-template: ${FACTORY_CLONE_URL_TEMPLATE:https://github.com/{repo}.git}
+  agent:
+    # Exactly one is needed in real mode. It stays on this host and in the model proxy, never in a sandbox.
+    api-key: ${ANTHROPIC_API_KEY:}
+    oauth-token: ${CLAUDE_CODE_OAUTH_TOKEN:}
+    model: ${FACTORY_AGENT_MODEL:}
+    tools: ${FACTORY_AGENT_TOOLS:Bash,Read,Edit,Write}
+    upstream-url: ${FACTORY_AGENT_UPSTREAM_URL:https://api.anthropic.com}
   checks:
     # Each target repo names its check command in .factory.yml on the base branch (see README). These are fallbacks.
     default-command: ${FACTORY_CHECKS_DEFAULT_COMMAND:}

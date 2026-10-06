@@ -8,8 +8,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 /**
  * Docker sandbox settings ({@code factory.integrations=real}), bound from {@code factory.sandbox.*}.
  *
- * @param image              must contain git and a POSIX shell; M4/M5 use an image with the repo's toolchain and the
- *                           agent CLI
+ * @param image              git, a shell and the Claude Code CLI: build {@code sandbox/Dockerfile}, adding the target
+ *                           repo's toolchain
  * @param workspaceSize      tmpfs size for {@code /workspace} (counts against {@code memory})
  * @param hostWorkDir        where the host keeps bare clones of target repos
  * @param cloneUrlTemplate   {@code {repo}} is replaced with owner/name
@@ -17,7 +17,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  */
 @ConfigurationProperties("factory.sandbox")
 public record SandboxProperties(
-        @DefaultValue("buildpack-deps:bookworm-scm") String image,
+        @DefaultValue("factory-sandbox:latest") String image,
         @DefaultValue("4g") String memory,
         @DefaultValue("2.0") double cpus,
         @DefaultValue("512") long pidsLimit,

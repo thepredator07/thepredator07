@@ -179,9 +179,8 @@ public class TicketPipeline implements JobHandler {
 
     /**
      * Runs the agent on its own virtual thread and waits for it in short ticks, so the wait can end early when the
-     * hard timeout passes, the ticket is cancelled, or this worker loses its lease.
-     * TODO(phase-2, M5): cancelling the future only interrupts the Java thread; the real runner must also kill the
-     * agent process and its container.
+     * hard timeout passes, the ticket is cancelled, or this worker loses its lease. Cancelling the future interrupts the
+     * agent's thread; the real runner then kills the agent's processes in the sandbox.
      */
     private AgentResult callAgentWithTimeout(Ticket t, AgentRequest request, JobContext context) {
         Instant deadline = clock.instant().plus(props.guardrails().hardTimeout().minus(elapsed(t)));

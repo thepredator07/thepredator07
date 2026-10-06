@@ -1,0 +1,84 @@
+name: Software Factory agent evaluation
+
+# Runs the real Claude Code agent on 10 fixture issues, an oversized ticket (turn guardrail) and a mid-run cancel,
+# through the whole pipeline. Uses the model API, so it costs money (API key) or subscription quota (Pro/Max token):
+# it only runs when started by hand.
+# Configure ONE secret in Settings > Secrets and variables > Actions:
+#   ANTHROPIC_API_KEY        an API key, ideally with a spending limit
+#   CLAUDE_CODE_OAUTH_TOKEN  a subscription token from `claude setup-token`
+# Without either, the job reports "not configured" and succeeds.
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'Model for the agent (empty: the CLI default)'
+        required: false
+        default: ''
+      budget_usd:
+        description: 'Stop starting new fixtures after the run has cost this much'
+        required: false
+        default: '8'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: factory-agent-eval
+  cancel-in-progress: false
+
+jobs:
+  agent-eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: software-factory
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      FACTORY_AGENT_MODEL: ${{ inputs.model }}
+      FACTORY_EVAL_BUDGET_USD: ${{ inputs.budget_usd }}
+    steps:
+      - name: Check configuration
+        id: config
+        working-directory: .
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "Agent evaluation not configured (ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN); skipping."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.config.outputs.configured == 'true'
+      - uses: actions/setup-java@v4
+        if: steps.config.outputs.configured == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: software-factory/pom.xml
+      - name: Build the sandbox image
+        if: steps.config.outputs.configured == 'true'
+        run: docker build -t factory-sandbox:latest sandbox
+      - name: Agent evaluation
+        if: steps.config.outputs.configured == 'true'
+        run: mvn -B test -Dgroups=agent-eval -Dsurefire.excludedGroups=
+      - name: Report
+        if: always() && steps.config.outputs.configured == 'true'
+        run: |
+          if [ -f target/agent-eval/report.md ]; then
+            cat target/agent-eval/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No report was written (the run stopped before the first result)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload report and test logs
+        if: always() && steps.config.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-eval
+          path: |
+            software-factory/target/agent-eval
+            software-factory/target/surefire-reports
+          if-no-files-found: ignore
