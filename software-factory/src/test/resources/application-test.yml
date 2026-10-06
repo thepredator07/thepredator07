@@ -1,3 +1,6 @@
+management:
+  server:
+    port: # same port as the app, so MockMvc tests reach the actuator; ManagementPortTest covers the real setup
 factory:
   worker:
     enabled: false

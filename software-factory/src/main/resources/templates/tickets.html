@@ -52,6 +52,11 @@
       </tbody>
     </table>
   </div>
+  <nav class="pager" th:if="${page > 1 or hasOlder}" aria-label="Pages">
+    <a th:if="${page > 1}" th:href="@{/tickets(state=${filter}, page=${page - 1})}">← Newer</a>
+    <span class="muted" th:text="'Page ' + ${page}">Page 1</span>
+    <a th:if="${hasOlder}" th:href="@{/tickets(state=${filter}, page=${page + 1})}">Older →</a>
+  </nav>
 </main>
 </body>
 </html>

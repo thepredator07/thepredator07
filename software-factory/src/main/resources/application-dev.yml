@@ -1,0 +1,4 @@
+# Local development: SPRING_PROFILES_ACTIVE=dev (or demo,dev). Template edits show up without a restart.
+spring:
+  thymeleaf:
+    cache: false

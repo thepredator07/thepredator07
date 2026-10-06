@@ -74,7 +74,11 @@ public class GitHubPoller {
         return poll().created();
     }
 
-    public PollResult poll() {
+    /**
+     * One poll at a time: a webhook can ask for a poll while the scheduled one runs, and two overlapping polls would
+     * each count the same missing issue, defeating the "missing twice in a row" rule.
+     */
+    public synchronized PollResult poll() {
         List<GitHubClient.Issue> open = github.listOpenIssues(props.repo(), props.triggerLabel());
         int created = 0;
         for (GitHubClient.Issue issue : open) {

@@ -23,11 +23,14 @@ public class WorkerPool implements SmartLifecycle {
     private final JobQueue queue;
     private final ObjectProvider<JobHandler> handler;
     private final FactoryProperties.Worker config;
+    private final com.ticketfactory.metrics.FactoryMetrics metrics;
     private final String instanceId = UUID.randomUUID().toString().substring(0, 8);
     private volatile boolean running;
     private ExecutorService executor;
 
-    public WorkerPool(JobQueue queue, ObjectProvider<JobHandler> handler, FactoryProperties props) {
+    public WorkerPool(JobQueue queue, ObjectProvider<JobHandler> handler, FactoryProperties props,
+                      com.ticketfactory.metrics.FactoryMetrics metrics) {
+        this.metrics = metrics;
         this.queue = queue;
         this.handler = handler;
         this.config = props.worker();
@@ -35,7 +38,7 @@ public class WorkerPool implements SmartLifecycle {
 
     /** Builds a worker bound to this pool's handler. Tests use this to drive work deterministically. */
     public Worker newWorker(String name) {
-        return new Worker(instanceId + "-" + name, queue, handler.getObject(), config);
+        return new Worker(instanceId + "-" + name, queue, handler.getObject(), config, metrics);
     }
 
     @Override

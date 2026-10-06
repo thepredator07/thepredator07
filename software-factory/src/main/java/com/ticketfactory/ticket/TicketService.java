@@ -1,5 +1,6 @@
 package com.ticketfactory.ticket;
 
+import com.ticketfactory.metrics.FactoryMetrics;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
@@ -10,12 +11,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TicketService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(TicketService.class);
+
     private final TicketRepository tickets;
     private final Clock clock;
+    private final FactoryMetrics metrics;
 
-    public TicketService(TicketRepository tickets, Clock clock) {
+    public TicketService(TicketRepository tickets, Clock clock, FactoryMetrics metrics) {
         this.tickets = tickets;
         this.clock = clock;
+        this.metrics = metrics;
     }
 
     /**
@@ -53,8 +58,10 @@ public class TicketService {
             throw new ConcurrentTransitionException(ticketId, expected, actual, to);
         }
         tickets.insertTransition(ticketId, expected, to, reason, now);
+        log.info("Ticket {}: {} -> {} ({})", ticketId, expected, to, reason);
         if (to.isTerminal()) {
             tickets.markFinished(ticketId, now, to == TicketState.FAILED ? reason : null);
+            metrics.ticketFinished(to);
         }
         return tickets.get(ticketId);
     }

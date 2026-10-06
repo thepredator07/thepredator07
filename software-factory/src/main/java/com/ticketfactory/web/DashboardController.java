@@ -26,6 +26,8 @@ import org.springframework.web.server.ResponseStatusException;
 @Controller
 public class DashboardController {
 
+    static final int PAGE_SIZE = 50;
+
     private final TicketRepository tickets;
     private final TicketService ticketService;
     private final JobQueue queue;
@@ -50,8 +52,14 @@ public class DashboardController {
     }
 
     @GetMapping("/tickets")
-    public String list(@RequestParam(required = false) TicketState state, Model model) {
-        model.addAttribute("tickets", tickets.findAll(state, 500));
+    public String list(@RequestParam(required = false) TicketState state,
+                       @RequestParam(defaultValue = "1") int page, Model model) {
+        int current = Math.max(1, Math.min(page, 100_000));
+        // One extra row tells whether there is an older page.
+        List<Ticket> rows = tickets.findPage(state, (current - 1) * PAGE_SIZE, PAGE_SIZE + 1);
+        model.addAttribute("tickets", rows.size() > PAGE_SIZE ? rows.subList(0, PAGE_SIZE) : rows);
+        model.addAttribute("page", current);
+        model.addAttribute("hasOlder", rows.size() > PAGE_SIZE);
         model.addAttribute("stats", stats.compute());
         model.addAttribute("filter", state);
         model.addAttribute("states", TicketState.values());
@@ -90,7 +98,12 @@ public class DashboardController {
 
     @PostMapping("/tickets/{id}/cancel")
     public String cancel(@PathVariable long id, RedirectAttributes redirect) {
-        boolean cancelled = ticketService.cancel(id, "Cancelled from the dashboard");
+        if (tickets.findById(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        // Who did it goes into the ticket's history.
+        String user = CurrentUserAdvice.name();
+        boolean cancelled = ticketService.cancel(id, "Cancelled from the dashboard" + (user == null ? "" : " by " + user));
         redirect.addFlashAttribute("message", cancelled ? "Ticket cancelled." : "Ticket was already finished.");
         return "redirect:/tickets/" + id;
     }

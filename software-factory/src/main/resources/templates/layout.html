@@ -14,7 +14,11 @@
       <a th:href="@{/tickets}" th:classappend="${active == 'tickets'} ? 'active'">Tickets</a>
       <a th:href="@{/stats}" th:classappend="${active == 'stats'} ? 'active'">Stats</a>
     </nav>
-    <span class="tag">Phase 1 · fake sandbox, agent &amp; GitHub · <span th:text="${props.repo}">repo</span></span>
+    <span class="tag"><span th:text="${props.fakeMode()} ? 'Fake mode · fake sandbox, agent &amp; GitHub' : 'Real mode'">mode</span>
+      · <span th:text="${props.repo}">repo</span></span>
+    <form th:if="${currentUser != null}" class="signout" method="post" th:action="@{/logout}">
+      <span th:text="${currentUser}">user</span> <button type="submit">Sign out</button>
+    </form>
   </div>
 </header>
 </body>

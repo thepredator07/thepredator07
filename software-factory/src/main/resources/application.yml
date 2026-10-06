@@ -10,21 +10,41 @@ spring:
     password: ${DATABASE_PASSWORD:}
   flyway:
     enabled: true
-  thymeleaf:
-    cache: false
 
 server:
   port: ${PORT:8080}
 
 management:
+  # Metrics and health on their own port, which docker-compose does not publish: Prometheus scrapes it from inside
+  # the network, without dashboard sign-in. Set MANAGEMENT_PORT to the server port to put them on the main port
+  # (then they need sign-in like everything else, except health).
+  server:
+    port: ${MANAGEMENT_PORT:8081}
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
+
+logging:
+  pattern:
+    # Ticket and job ids on every line written while a job runs (empty otherwise).
+    level: "%5p [t:%X{ticketId:-} j:%X{jobId:-}]"
 
 factory:
-  # fake (Phase 1, default) | real (Phase 2, not implemented yet: fails fast at startup)
+  # fake (default) | real
   integrations: ${FACTORY_INTEGRATIONS:fake}
+  webhook:
+    # Shared secret of the GitHub webhook (content type application/json; events: issues, pull_request,
+    # pull_request_review). Empty: no webhook endpoint, polling only.
+    secret: ${GITHUB_WEBHOOK_SECRET:}
+  security:
+    # github | basic | none (fake mode only). Empty: none in fake mode; real mode then refuses to start.
+    mode: ${FACTORY_SECURITY:}
+    allowed-users: ${FACTORY_ALLOWED_USERS:}
+    github-client-id: ${GITHUB_OAUTH_CLIENT_ID:}
+    github-client-secret: ${GITHUB_OAUTH_CLIENT_SECRET:}
+    admin-user: ${FACTORY_ADMIN_USER:admin}
+    admin-password: ${FACTORY_ADMIN_PASSWORD:}
   # Target repository and the issue label that opts an issue into the factory.
   repo: ${FACTORY_REPO:example-org/example-repo}
   trigger-label: ${FACTORY_TRIGGER_LABEL:factory}
@@ -35,7 +55,8 @@ factory:
     poll-interval: ${FACTORY_WORKER_POLL_INTERVAL:PT1S}
     lease-timeout: PT10M
     retry-backoff: PT2S
-    approval-poll-interval: PT5S
+    # How often a ticket waiting for approval asks GitHub; webhooks (below) make it react at once anyway.
+    approval-poll-interval: ${FACTORY_APPROVAL_POLL_INTERVAL:PT1M}
   poller:
     enabled: ${FACTORY_POLLER_ENABLED:true}
     interval: ${FACTORY_POLLER_INTERVAL:PT10S}

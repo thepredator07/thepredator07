@@ -2,6 +2,7 @@ package com.ticketfactory.web;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -103,14 +104,55 @@ class DashboardControllerTest extends AbstractIntegrationTest {
     void cancelAndApproveActions() throws Exception {
         long waiting = submitAndRun(1, "Needs review", "fake-approval: pending");
 
-        mvc.perform(post("/tickets/" + waiting + "/approve"))
+        mvc.perform(post("/tickets/" + waiting + "/approve").with(csrf()))
                 .andExpect(status().is3xxRedirection());
         workers.newWorker("web").drain(10);
         org.assertj.core.api.Assertions.assertThat(tickets.get(waiting).state()).isEqualTo(TicketState.DONE);
 
         long other = submitAndRun(2, "Cancel me", "fake-approval: pending");
-        mvc.perform(post("/tickets/" + other + "/cancel")).andExpect(status().is3xxRedirection());
+        mvc.perform(post("/tickets/" + other + "/cancel").with(csrf())).andExpect(status().is3xxRedirection());
         org.assertj.core.api.Assertions.assertThat(tickets.get(other).state()).isEqualTo(TicketState.CANCELLED);
+    }
+
+    @Test
+    void theTicketListIsPaged() throws Exception {
+        for (int i = 1; i <= 55; i++) {
+            jdbc.sql("INSERT INTO tickets (repo, issue_number, title, body, state, attempt, triggered_at, created_at,"
+                            + " updated_at) VALUES ('acme/app', :n, :t, '', 'DONE', 1, now(), now() + :n * interval"
+                            + " '1 second', now())")
+                    .param("n", i).param("t", "Ticket number " + i).update();
+        }
+        mvc.perform(get("/tickets")).andExpect(status().isOk())
+                .andExpect(content().string(containsString("Ticket number 55")))
+                .andExpect(content().string(containsString("Ticket number 6<")))
+                .andExpect(content().string(not(containsString("Ticket number 5<"))))
+                .andExpect(content().string(containsString("Older")))
+                .andExpect(content().string(not(containsString("Newer"))));
+        mvc.perform(get("/tickets").param("page", "2")).andExpect(status().isOk())
+                .andExpect(content().string(containsString("Ticket number 5<")))
+                .andExpect(content().string(containsString("Ticket number 1<")))
+                .andExpect(content().string(not(containsString("Ticket number 6<"))))
+                .andExpect(content().string(containsString("Newer")))
+                .andExpect(content().string(not(containsString("Older"))));
+    }
+
+    /** Another site can't make a visitor's browser cancel tickets: forms without the CSRF token are refused. */
+    @Test
+    void actionsWithoutACsrfTokenAreRefused() throws Exception {
+        long waiting = submitAndRun(3, "Keep me", "fake-approval: pending");
+
+        mvc.perform(post("/tickets/" + waiting + "/cancel")).andExpect(status().isForbidden());
+        mvc.perform(post("/tickets/" + waiting + "/approve")).andExpect(status().isForbidden());
+
+        org.assertj.core.api.Assertions.assertThat(tickets.get(waiting).state())
+                .isEqualTo(TicketState.AWAITING_APPROVAL);
+    }
+
+    @Test
+    void ticketPageFormsCarryTheCsrfToken() throws Exception {
+        long waiting = submitAndRun(4, "Has forms", "fake-approval: pending");
+        mvc.perform(get("/tickets/" + waiting)).andExpect(status().isOk())
+                .andExpect(content().string(containsString("name=\"_csrf\"")));
     }
 
     @Test
