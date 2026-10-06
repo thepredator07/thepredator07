@@ -32,6 +32,11 @@ public abstract class GitHubClientContract {
     /** Opens a new issue in {@link #repo()} and returns its number. */
     protected abstract int openIssue(String title, String body, String... labels);
 
+    /** The title GitHub will hold for an issue opened as {@code title} (a fixture may mark its issues). */
+    protected String expectedTitle(String title) {
+        return title;
+    }
+
     /** A human approves the PR. */
     protected abstract void approve(int prNumber);
 
@@ -111,7 +116,7 @@ public abstract class GitHubClientContract {
                 .orElseThrow(() -> new AssertionError("issue #" + n + " never appeared in the listing"));
 
         assertThat(issue.repo()).isEqualTo(repo());
-        assertThat(issue.title()).isEqualTo("Add CSV export");
+        assertThat(issue.title()).isEqualTo(expectedTitle("Add CSV export"));
         assertThat(issue.body()).isEqualTo("Users want CSV.");
         assertThat(issue.labels()).contains(LABEL);
         assertThat(issue.triggeredAt()).isNotNull().isAfter(before);
