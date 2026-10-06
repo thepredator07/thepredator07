@@ -1,0 +1,7 @@
+factory:
+  worker:
+    enabled: false
+    retry-backoff: PT0S
+    approval-poll-interval: PT1H
+  poller:
+    enabled: false

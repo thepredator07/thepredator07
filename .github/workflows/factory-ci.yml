@@ -1,0 +1,33 @@
+name: Software Factory CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: software-factory
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: software-factory/pom.xml
+      - name: Build and test (Testcontainers uses the runner's Docker)
+        run: mvn -B clean verify
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: software-factory/target/surefire-reports
+          if-no-files-found: ignore

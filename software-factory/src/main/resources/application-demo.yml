@@ -1,0 +1,9 @@
+# Demo profile: seeds history and runs a few live tickets through the fakes at a watchable pace.
+factory:
+  worker:
+    threads: 2
+    poll-interval: PT0.5S
+    retry-backoff: PT2S
+    approval-poll-interval: PT3S
+  poller:
+    interval: PT3S

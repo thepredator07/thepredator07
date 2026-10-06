@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: software-factory
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/factory}
+    username: ${DATABASE_USERNAME:factory}
+    password: ${DATABASE_PASSWORD:}
+  flyway:
+    enabled: true
+  thymeleaf:
+    cache: false
+
+server:
+  port: ${PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+factory:
+  # Target repository and the issue label that opts an issue into the factory.
+  repo: ${FACTORY_REPO:example-org/example-repo}
+  trigger-label: ${FACTORY_TRIGGER_LABEL:factory}
+  base-branch: ${FACTORY_BASE_BRANCH:main}
+  worker:
+    enabled: ${FACTORY_WORKER_ENABLED:true}
+    threads: ${FACTORY_WORKER_THREADS:2}
+    poll-interval: ${FACTORY_WORKER_POLL_INTERVAL:PT1S}
+    lease-timeout: PT10M
+    retry-backoff: PT2S
+    approval-poll-interval: PT5S
+  poller:
+    enabled: ${FACTORY_POLLER_ENABLED:true}
+    interval: ${FACTORY_POLLER_INTERVAL:PT10S}
+  guardrails:
+    max-cost-usd: ${FACTORY_MAX_COST_USD:2.00}
+    max-turns: ${FACTORY_MAX_TURNS:40}
+    hard-timeout: ${FACTORY_HARD_TIMEOUT:PT30M}
+    max-retries: ${FACTORY_MAX_RETRIES:3}
+  fakes:
+    # Default behaviour of each fake: succeed | fail | fail-then-succeed
+    sandbox: { mode: succeed, failures-before-success: 1 }
+    agent: { mode: succeed, failures-before-success: 1, turns-per-run: 6, input-tokens-per-turn: 4000, output-tokens-per-turn: 800, cost-per-run-usd: 0.12, delay: PT0S }
+    checks: { mode: succeed, failures-before-success: 1 }
+    github: { mode: succeed, failures-before-success: 1, auto-approve: true }

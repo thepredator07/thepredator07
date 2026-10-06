@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head('Stats')}"></head>
+<body>
+<header th:replace="~{layout :: nav('stats')}"></header>
+<main>
+  <h1>Stats</h1>
+
+  <section class="tiles" aria-label="Headline numbers">
+    <div class="tile"><div class="label">Success rate</div>
+      <div class="value" id="success-rate" th:text="${@fmt.percent(stats.successRate)}">—</div>
+      <div class="sub">done ÷ (done + failed)</div></div>
+    <div class="tile"><div class="label">Avg duration</div>
+      <div class="value" id="avg-duration" th:text="${@fmt.duration(stats.avgDurationMs)}">—</div>
+      <div class="sub">done + failed tickets</div></div>
+    <div class="tile"><div class="label">Avg cost</div>
+      <div class="value" id="avg-cost" th:text="${@fmt.usd(stats.avgCostUsd)}">—</div>
+      <div class="sub">per finished ticket</div></div>
+    <div class="tile"><div class="label">Total cost</div>
+      <div class="value" id="total-cost" th:text="${@fmt.usd(stats.totalCostUsd)}">$0</div>
+      <div class="sub">all tickets</div></div>
+    <div class="tile"><div class="label">Tokens</div>
+      <div class="value" th:text="${@fmt.tokens(stats.totalTokens)}">0</div>
+      <div class="sub">input + output</div></div>
+    <div class="tile"><div class="label">Retries</div>
+      <div class="value" th:text="${stats.totalRetries}">0</div>
+      <div class="sub">across all tickets</div></div>
+  </section>
+
+  <div class="grid2">
+    <div>
+      <h2>Tickets by state</h2>
+      <div class="card">
+        <table>
+          <thead><tr><th>State</th><th class="num">Tickets</th><th>Share</th></tr></thead>
+          <tbody>
+          <tr th:each="s : ${states}">
+            <td><a th:href="@{/tickets(state=${s})}"><span class="badge" th:classappend="${s}" th:text="${s}">S</span></a></td>
+            <td class="num" th:text="${stats.byState.get(s)}">0</td>
+            <td><div class="meter" role="img" th:aria-label="${shares.get(s)} + '%'">
+              <span th:style="'width:' + ${shares.get(s)} + '%'"></span></div></td>
+          </tr>
+          <tr><td><strong>Total</strong></td><td class="num"><strong th:text="${stats.total}">0</strong></td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h2>Cost by outcome</h2>
+      <div class="card">
+        <table>
+          <thead><tr><th>Outcome</th><th class="num">Tickets</th><th class="num">Avg cost</th></tr></thead>
+          <tbody>
+          <tr><td><span class="badge DONE">DONE</span></td><td class="num" th:text="${stats.done}">0</td>
+            <td class="num" th:text="${@fmt.usd(stats.avgCostDone)}">—</td></tr>
+          <tr><td><span class="badge FAILED">FAILED</span></td><td class="num" th:text="${stats.failed}">0</td>
+            <td class="num" th:text="${@fmt.usd(stats.avgCostFailed)}">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h2>Guardrails</h2>
+      <div class="card">
+        <dl class="kv">
+          <dt>Max cost per ticket</dt><dd th:text="${@fmt.usd(props.guardrails.maxCostUsd)}">$2</dd>
+          <dt>Max agent turns</dt><dd th:text="${props.guardrails.maxTurns}">40</dd>
+          <dt>Hard timeout</dt><dd th:text="${@fmt.duration(props.guardrails.hardTimeout)}">30m</dd>
+          <dt>Max retries</dt><dd th:text="${props.guardrails.maxRetries}">3</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <h2>Recent failures</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>#</th><th>Issue</th><th>Reason</th><th class="num">Cost</th></tr></thead>
+      <tbody>
+      <tr th:if="${failures.isEmpty()}"><td colspan="4" class="muted">No failures.</td></tr>
+      <tr th:each="t : ${failures}">
+        <td><a th:href="@{/tickets/{id}(id=${t.id})}" th:text="${t.id}">1</a></td>
+        <td th:text="${t.title}">title</td>
+        <td class="reason" th:text="${t.failureReason}">why</td>
+        <td class="num" th:text="${@fmt.usd(t.costUsd)}">$0</td>
+      </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+</body>
+</html>

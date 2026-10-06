@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="head(title)">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title th:text="${title} + ' · Software Factory'">Software Factory</title>
+  <link rel="stylesheet" th:href="@{/app.css}">
+</head>
+<body>
+<header th:fragment="nav(active)">
+  <div class="bar-top">
+    <a class="brand" th:href="@{/tickets}">Software Factory</a>
+    <nav>
+      <a th:href="@{/tickets}" th:classappend="${active == 'tickets'} ? 'active'">Tickets</a>
+      <a th:href="@{/stats}" th:classappend="${active == 'stats'} ? 'active'">Stats</a>
+    </nav>
+    <span class="tag">Phase 1 · fake sandbox, agent &amp; GitHub · <span th:text="${props.repo}">repo</span></span>
+  </div>
+</header>
+</body>
+</html>
