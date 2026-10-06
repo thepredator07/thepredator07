@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head('Ticket ' + ${t.id})}"></head>
+<body>
+<header th:replace="~{layout :: nav('tickets')}"></header>
+<main>
+  <p><a th:href="@{/tickets}">← All tickets</a></p>
+  <div class="flash" th:if="${message}" th:text="${message}">msg</div>
+  <h1><span th:text="'#' + ${t.id} + ' · ' + ${t.title}">Title</span>
+    <span class="badge" th:classappend="${t.state}" th:text="${t.state}">STATE</span></h1>
+
+  <div class="actions" th:unless="${t.state.terminal}">
+    <form th:if="${t.state.name() == 'AWAITING_APPROVAL'}" method="post" th:action="@{/tickets/{id}/approve(id=${t.id})}">
+      <button class="primary" type="submit">Approve PR (fake GitHub)</button>
+    </form>
+    <form method="post" th:action="@{/tickets/{id}/cancel(id=${t.id})}">
+      <button type="submit">Cancel ticket</button>
+    </form>
+  </div>
+
+  <p class="err" th:if="${t.failureReason}"><strong>Failure:</strong> <span th:text="${t.failureReason}">why</span></p>
+
+  <div class="grid2">
+    <div class="card">
+      <dl class="kv">
+        <dt>Issue</dt><dd th:text="${t.repo + '#' + t.issueNumber}">repo#1</dd>
+        <dt>Branch</dt><dd><code th:text="${t.branchName ?: '—'}">factory/1</code></dd>
+        <dt>Pull request</dt>
+        <dd><a th:if="${t.prUrl}" th:href="${t.prUrl}" th:text="'#' + ${t.prNumber}">#1</a>
+          <span th:unless="${t.prUrl}">—</span></dd>
+        <dt>Sandbox</dt><dd><code th:text="${t.sandboxId ?: '—'}">sbx</code></dd>
+        <dt>Created</dt><dd th:text="${@fmt.ts(t.createdAt)}">ts</dd>
+        <dt>Started</dt><dd th:text="${@fmt.ts(t.startedAt)}">ts</dd>
+        <dt>Finished</dt><dd th:text="${@fmt.ts(t.finishedAt)}">ts</dd>
+        <dt>Duration</dt><dd th:text="${@fmt.duration(t.elapsed(now))}">—</dd>
+      </dl>
+    </div>
+    <div class="card">
+      <dl class="kv">
+        <dt>Cost</dt><dd><span th:text="${@fmt.usdPrecise(t.costUsd)}">$0</span>
+          <span class="muted" th:text="'of ' + ${@fmt.usd(props.guardrails.maxCostUsd)} + ' limit'">limit</span></dd>
+        <dt>Turns</dt><dd><span th:text="${t.turns}">0</span>
+          <span class="muted" th:text="'of ' + ${props.guardrails.maxTurns} + ' limit'">limit</span></dd>
+        <dt>Input tokens</dt><dd th:text="${#numbers.formatInteger(t.tokensInput, 1, 'COMMA')}">0</dd>
+        <dt>Output tokens</dt><dd th:text="${#numbers.formatInteger(t.tokensOutput, 1, 'COMMA')}">0</dd>
+        <dt>Retries</dt><dd><span th:text="${t.retries}">0</span>
+          <span class="muted" th:text="'of ' + ${props.guardrails.maxRetries} + ' allowed'">limit</span></dd>
+        <dt>Outcome</dt><dd th:text="${t.state.terminal} ? ${t.state} : 'in progress'">—</dd>
+      </dl>
+    </div>
+  </div>
+
+  <h2>State history</h2>
+  <div class="card">
+    <table class="timeline">
+      <thead><tr><th>When</th><th>Transition</th><th class="num">Time in previous state</th><th>Reason</th></tr></thead>
+      <tbody>
+      <tr th:each="h, it : ${history}">
+        <td th:text="${@fmt.ts(h.createdAt)}">ts</td>
+        <td><span th:if="${h.fromState}"><span class="badge" th:classappend="${h.fromState}" th:text="${h.fromState}">A</span> →</span>
+          <span class="badge" th:classappend="${h.toState}" th:text="${h.toState}">B</span></td>
+        <td class="num" th:text="${it.first} ? '—' : ${@fmt.between(history[it.index - 1].createdAt, h.createdAt)}">—</td>
+        <td class="reason" th:text="${h.reason}">reason</td>
+      </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <th:block th:if="${t.lastFeedback}">
+    <h2>Last checks output</h2>
+    <pre th:text="${t.lastFeedback}">output</pre>
+  </th:block>
+
+  <h2>Issue body</h2>
+  <pre th:text="${t.body.isEmpty()} ? '(empty)' : ${t.body}">body</pre>
+
+  <h2>Jobs</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>Job</th><th>Status</th><th class="num">Attempts</th><th>Run after</th><th>Note / last error</th></tr></thead>
+      <tbody>
+      <tr th:if="${jobs.isEmpty()}"><td colspan="5" class="muted">No jobs.</td></tr>
+      <tr th:each="j : ${jobs}">
+        <td th:text="${j.id}">1</td><td th:text="${j.status}">DONE</td>
+        <td class="num" th:text="${j.attempts}">1</td>
+        <td th:text="${@fmt.ts(j.runAfter)}">ts</td>
+        <td class="reason" th:text="${j.lastError ?: '—'}">—</td>
+      </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+</body>
+</html>

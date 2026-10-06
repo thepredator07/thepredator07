@@ -91,6 +91,13 @@ public class JobQueue {
                 .param("now", Timestamp.from(now)).param("cutoff", Timestamp.from(now.minus(lease))).update();
     }
 
+    /** Makes a parked job for this ticket runnable now (e.g. after a PR was approved). */
+    public void wakeUp(long ticketId) {
+        Timestamp now = Timestamp.from(clock.instant());
+        jdbc.sql("UPDATE jobs SET run_after = :now, updated_at = :now WHERE ticket_id = :t AND status = 'PENDING'")
+                .param("t", ticketId).param("now", now).update();
+    }
+
     public Optional<Job> findActiveForTicket(long ticketId) {
         return jdbc.sql("SELECT * FROM jobs WHERE ticket_id = :t AND status IN ('PENDING','RUNNING')")
                 .param("t", ticketId).query(JOB).optional();

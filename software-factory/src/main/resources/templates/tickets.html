@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head('Tickets')}"></head>
+<body>
+<header th:replace="~{layout :: nav('tickets')}"></header>
+<main>
+  <h1>Tickets</h1>
+
+  <section class="tiles" aria-label="Summary">
+    <div class="tile"><div class="label">Tickets</div><div class="value" th:text="${stats.total}">0</div>
+      <div class="sub"><span th:text="${stats.active}">0</span> in progress</div></div>
+    <div class="tile"><div class="label">Success rate</div>
+      <div class="value" th:text="${@fmt.percent(stats.successRate)}">—</div>
+      <div class="sub"><span th:text="${stats.done}">0</span> done · <span th:text="${stats.failed}">0</span> failed</div></div>
+    <div class="tile"><div class="label">Avg duration</div>
+      <div class="value" th:text="${@fmt.duration(stats.avgDurationMs)}">—</div>
+      <div class="sub">done + failed tickets</div></div>
+    <div class="tile"><div class="label">Total cost</div>
+      <div class="value" th:text="${@fmt.usd(stats.totalCostUsd)}">$0</div>
+      <div class="sub">avg <span th:text="${@fmt.usd(stats.avgCostUsd)}">—</span> per finished ticket</div></div>
+  </section>
+
+  <div class="filters" aria-label="Filter by state">
+    <a th:href="@{/tickets}" th:classappend="${filter == null} ? 'on'">All</a>
+    <a th:each="s : ${states}" th:href="@{/tickets(state=${s})}" th:classappend="${filter == s} ? 'on'"
+       th:text="${s}">STATE</a>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+      <tr>
+        <th>#</th><th>Issue</th><th>State</th><th class="num">Tokens</th><th class="num">Cost</th>
+        <th class="num">Retries</th><th class="num">Duration</th><th>Created</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr th:if="${tickets.isEmpty()}"><td colspan="8" class="muted">No tickets yet. Label an issue
+        <code th:text="${props.triggerLabel}">factory</code> to create one.</td></tr>
+      <tr th:each="t : ${tickets}">
+        <td><a th:href="@{/tickets/{id}(id=${t.id})}" th:text="${t.id}">1</a></td>
+        <td><a th:href="@{/tickets/{id}(id=${t.id})}" th:text="${t.title}">Title</a>
+          <div class="muted" th:text="${t.repo + '#' + t.issueNumber}">repo#1</div></td>
+        <td><span class="badge" th:classappend="${t.state}" th:text="${t.state}">STATE</span></td>
+        <td class="num" th:text="${@fmt.tokens(t.totalTokens())}">0</td>
+        <td class="num" th:text="${@fmt.usd(t.costUsd)}">$0</td>
+        <td class="num" th:text="${t.retries}">0</td>
+        <td class="num" th:text="${@fmt.duration(t.elapsed(now))}">—</td>
+        <td class="muted" th:text="${@fmt.ts(t.createdAt)}">ts</td>
+      </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+</body>
+</html>
