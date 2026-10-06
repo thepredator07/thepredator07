@@ -59,6 +59,11 @@ factory:
     cpus: ${FACTORY_SANDBOX_CPUS:2.0}
     host-work-dir: ${FACTORY_WORK_DIR:/var/lib/factory}
     clone-url-template: ${FACTORY_CLONE_URL_TEMPLATE:https://github.com/{repo}.git}
+  checks:
+    # Each target repo names its check command in .factory.yml on the base branch (see README). These are fallbacks.
+    default-command: ${FACTORY_CHECKS_DEFAULT_COMMAND:}
+    default-timeout: ${FACTORY_CHECKS_DEFAULT_TIMEOUT:PT10M}
+    max-timeout: ${FACTORY_CHECKS_MAX_TIMEOUT:PT30M}
   fakes:
     # Default behaviour of each fake: succeed | fail | fail-then-succeed
     sandbox: { mode: succeed, failures-before-success: 1 }

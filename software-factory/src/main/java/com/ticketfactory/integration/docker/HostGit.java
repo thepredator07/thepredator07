@@ -11,7 +11,11 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
@@ -57,6 +61,31 @@ public class HostGit {
         });
     }
 
+    /**
+     * Contents of {@code path} on {@code branch} as the remote has it now, or empty if the file does not exist. Read on
+     * the host, so nothing a sandbox does can change the answer.
+     *
+     * @throws StepFailedException if the file is larger than {@code maxBytes}
+     */
+    public Optional<String> readFile(String repo, String branch, String path, int maxBytes) {
+        return withRepo(repo, dir -> {
+            String spec = "refs/heads/" + branch + ":" + path;
+            String type = gitOrNull(dir, "cat-file", "-t", spec);
+            if (type == null) {
+                return Optional.<String>empty();
+            }
+            if (!type.strip().equals("blob")) {
+                throw new StepFailedException(path + " on " + branch + " is not a file");
+            }
+            long size = Long.parseLong(git(dir.getParent(), "-C", dir.toString(), "cat-file", "-s", spec).strip());
+            if (size > maxBytes) {
+                throw new StepFailedException(path + " on " + branch + " is " + size + " bytes, over the limit of "
+                        + maxBytes);
+            }
+            return Optional.of(git(dir.getParent(), "-C", dir.toString(), "cat-file", "blob", spec));
+        });
+    }
+
     private interface RepoWork<T> {
         T apply(Path dir) throws IOException;
     }
@@ -80,7 +109,25 @@ public class HostGit {
         }
     }
 
-    private void git(Path cwd, String... args) throws IOException {
+    /** Output of a git command run in {@code dir}, or null if it exited non-zero (e.g. "no such path"). */
+    private String gitOrNull(Path dir, String... args) throws IOException {
+        try {
+            List<String> all = new ArrayList<>(List.of("-C", dir.toString()));
+            all.addAll(List.of(args));
+            return git(dir.getParent(), all.toArray(String[]::new));
+        } catch (GitExitException e) {
+            return null;
+        }
+    }
+
+    /** git exited with a non-zero code (as opposed to failing to run at all). */
+    private static final class GitExitException extends IOException {
+        GitExitException(String message) {
+            super(message);
+        }
+    }
+
+    private String git(Path cwd, String... args) throws IOException {
         List<String> cmd = new ArrayList<>();
         cmd.add("git");
         cmd.addAll(List.of(args));
@@ -96,20 +143,38 @@ public class HostGit {
             env.put("GIT_CONFIG_VALUE_0", "Authorization: Basic " + basic);
         }
         Process p = pb.start();
+        // Read while git runs: output bigger than the pipe buffer would otherwise block git until the timeout.
+        CompletableFuture<byte[]> output = CompletableFuture.supplyAsync(() -> {
+            try {
+                return p.getInputStream().readAllBytes();
+            } catch (IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        }, Thread::startVirtualThread);
         try {
             if (!p.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
                 p.destroyForcibly();
-                throw new IOException("git " + args[0] + " timed out after " + timeout);
+                throw new IOException("git " + String.join(" ", redact(args)) + " timed out after " + timeout);
             }
         } catch (InterruptedException e) {
             p.destroyForcibly();
             Thread.currentThread().interrupt();
             throw new IOException("interrupted", e);
         }
-        String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        if (p.exitValue() != 0) {
-            throw new IOException("git " + String.join(" ", redact(args)) + " exited " + p.exitValue() + ": " + out.strip());
+        String out;
+        try {
+            out = new String(output.get(timeout.toMillis(), TimeUnit.MILLISECONDS), StandardCharsets.UTF_8);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("interrupted", e);
+        } catch (ExecutionException | TimeoutException e) {
+            throw new IOException("could not read git output: " + e, e);
         }
+        if (p.exitValue() != 0) {
+            throw new GitExitException("git " + String.join(" ", redact(args)) + " exited " + p.exitValue() + ": "
+                    + out.strip());
+        }
+        return out;
     }
 
     private static List<String> redact(String[] args) {

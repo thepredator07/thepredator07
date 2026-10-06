@@ -6,7 +6,7 @@ import java.util.Set;
 
 /**
  * The factory's view of GitHub. Phase 1: {@code FakeGitHubClient}.
- * TODO(phase-2): REST/GraphQL implementation using a GitHub App token from the environment.
+ * Real implementation: {@code GitHubRestClient} (GitHub App or token auth from the environment).
  */
 public interface GitHubClient {
 

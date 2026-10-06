@@ -50,6 +50,24 @@ public final class DockerSandboxFixture implements AutoCloseable {
                 props, "main");
     }
 
+    /** Commits {@code files} (path to content) to {@code main} on the remote, as a maintainer pushing would. */
+    public void commitToMain(java.util.Map<String, String> files, String message) {
+        Path work = root.resolve("work-" + System.nanoTime());
+        git(root, "clone", "-q", "-b", "main", origin.toString(), work.toString());
+        try {
+            for (var f : files.entrySet()) {
+                Path file = work.resolve(f.getKey());
+                Files.createDirectories(file.getParent());
+                Files.writeString(file, f.getValue());
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+        git(work, "add", ".");
+        git(work, "-c", "user.name=seed", "-c", "user.email=seed@x", "commit", "-q", "-m", message);
+        git(work, "push", "-q", "origin", "main");
+    }
+
     public long id(long n) {
         return idBase + n;
     }

@@ -24,7 +24,7 @@ class FakeChecksRunnerContractTest extends ChecksRunnerContract {
     }
 
     @Override
-    protected Optional<ChecksRunner> failingRunner() {
-        return Optional.of(new FakeChecksRunner(FakeBehavior.FAIL));
+    protected Optional<ChecksRunner.ChecksResult> runFailingChecks() {
+        return Optional.of(new FakeChecksRunner(FakeBehavior.FAIL).run(passingTicket(), sandboxId()));
     }
 }

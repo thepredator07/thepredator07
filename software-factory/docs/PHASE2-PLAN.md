@@ -162,7 +162,7 @@ engineer; they are rough.
 | **M1** ✅ | **Contract tests + attempt model** (done, see below) | Abstract contract test per interface, run against the fakes; Flyway V2 for `attempts` (finding 6); poller reconciliation and paging (finding 7) | Fakes pass all contracts; V2 migrates a DB seeded by the demo without loss; re-labeling a failed issue starts attempt #2 | 3–4 days |
 | **M2** ✅ | **Real GitHub client** (done; live run passed, see below) | `GitHubRestClient` (GitHub App auth from env), issues by label with paging, labeler permission check, open or find PR, review status, comments; host-side push | Contract suite passes against WireMock on every push and against a live test repo nightly; rate limits handled | 3–4 days |
 | **M3** ✅ | **Docker sandbox** (done, see below) | `DockerSandboxRunner`: one container per attempt, named `factory-<id>`, idempotent, resource limits, non-root, egress allowlist, no secrets inside; janitor for orphans | Contract and security tests pass on real Docker in CI; killing the app mid-step leaves no orphan after the janitor runs | 4–5 days |
-| **M4** | **Real checks** | `SandboxChecksRunner`: per-repo check command from config (e.g. `.factory.yml`), output truncation, timeout | Passes and fails correctly on a sample repo with a known failing test | 1–2 days |
+| **M4** ✅ | **Real checks** (done, see below) | `SandboxChecksRunner`: per-repo check command from config (e.g. `.factory.yml`), output truncation, timeout | Passes and fails correctly on a sample repo with a known failing test | 1–2 days |
 | **M5** | **Claude Code agent** | `ClaudeCodeAgentRunner`: headless run in the sandbox with `--max-turns`, usage parsed into `AgentResult`, cancellation kills the process (finding 5), feedback loop from failed checks | Agent eval: at least 6 of 10 fixture issues reach DONE within limits; guardrails trip correctly on a deliberately oversized ticket; cancel stops spending within 10s | 4–6 days |
 | **M6** | **Security and operations** | Dashboard auth + CSRF (finding 8); metrics and MDC (finding 10); webhooks with polling fallback (finding 12); production config (finding 14) | Security tests pass; Prometheus shows queue depth, cost and outcomes; one load test run at 1,000 tickets | 3–4 days |
 | **M7** | **Pilot** | Run on one real low-risk repo with a small daily cost cap; reviewer agent and changes-requested edge (finding 13) can follow here | Two weeks of real tickets; success rate, cost per ticket and failure reasons reviewed weekly; no double runs, no leaked sandboxes, no secret exposure | 2 weeks elapsed |
@@ -246,6 +246,39 @@ recreating instead of reusing, the janitor ignoring finished tickets, and removi
 each make tests fail. Two of these first *survived*, which showed two weak tests. Effective capabilities are always
 zero for a non-root user, so the test now checks the bounding set. A recreated container keeps its name, so the reuse
 test now checks the container id and a file written inside. Both are fixed.
+
+## M4 status: done
+
+| Item | What changed | Proven by |
+|------|--------------|-----------|
+| `SandboxChecksRunner` | Runs the repo's check command in the ticket's sandbox (`sh -c`, working directory `/workspace/repo`, `CI=true`) on whatever the agent left in the working tree | `SandboxChecksRunnerContractTest` (shared contract, 3), `SandboxChecksRunnerTest` (11), on real Docker |
+| Per-repo config | `.factory.yml` (`checks.command`, optional `checks.timeout`), **read on the host from the base branch**, so the agent can't weaken the checks by editing its copy. Fallback `factory.checks.default-command`; a repo's timeout is capped by `factory.checks.max-timeout` | `theAgentCannotWeakenTheChecksByEditingItsCopyOfTheConfig`, `aChangeToTheConfigOnMainIsUsedByTheNextRun`, `ChecksConfigTest` (11), `HostGitReadFileTest` (5) |
+| Timeout | `timeout -k 10s <n>s` inside the sandbox stops the whole process group; the host waits 70 s longer as a backstop. A timeout counts as failed checks, so the agent sees it | `aHangingBuildIsStoppedAtTheTimeout...LeavesNoProcessBehind`, `aBuildThatIgnoresSigtermIsKilled` |
+| Output truncation | `BoundedOutput` keeps the first 8 KB and the last ~55 KB in fixed memory, with a "bytes omitted" marker; the result is never over 64 K characters. Output starts with the command and ends with the exit code and duration | `floodingOutputIsCutToTheLimitKeepingTheStartAndTheEnd` (30 MB of output), `BoundedOutputTest` (6) |
+| Repo misconfiguration | Missing or invalid `.factory.yml` fails the ticket **at once** with the reason (`UnrecoverableStepException`) instead of spending its retries | `aRepoWithoutACheckCommandFailsTheTicketAtOnceWithoutRetries`, `anInvalidConfigFailsTheTicketAtOnceWithTheReason` |
+| Sandbox init process (found by the timeout test) | Sandboxes now run with Docker's `--init`. Without it, every process killed by a timeout stayed a zombie, because `sleep infinity` (PID 1) never reaps them, and they would pile up to the pids limit | Same timeout test (it asserts no `<defunct>` processes) |
+| Wiring | `factory.integrations=real` now builds `SandboxChecksRunner`; only the agent (M5) is still missing | `IntegrationModeTest` |
+
+**Exit criterion: "passes and fails correctly on a sample repo with a known failing test".** `SampleRepo` is a small
+Python project with a real unit test and a known bug. `aRepoWithAKnownFailingTestFailsAndTheOutputNamesTheTest`
+shows the checks fail and the output names `test_add_negative`. `checksRunOnTheAgentsWorkSoFixingTheBugMakesThemPass`
+shows they pass once the code is fixed. `DockerChecksPipelineTest` runs the whole loop through the pipeline: a scripted
+agent (standing in for M5) makes an unrelated change, the checks fail, the output goes back to it as feedback, it fixes
+the bug, the checks pass, and the branch with the fix is pushed and the PR opened.
+
+Mutation check: reading the config from the sandbox, dropping the `timeout` wrapper, dropping `-k`, unbounded output,
+retrying unrecoverable failures, reading git output only after git exits, and turning off `--init` each make tests
+fail. My first try at the git-output mutant was invalid (it threw an exception rather than reproducing the bug); the
+proper one failed after the 30 s git timeout, as expected.
+
+**Known limits, for M5 and the pilot:**
+- The sandbox has no network, so checks can only use what is in the image or the repo. A real Java or Node repo needs
+  an image with its toolchain and dependencies (or an offline cache in the repo), or a package mirror behind the M5
+  egress proxy (decision 55).
+- The agent can still change the *tests* themselves. Making failing checks pass by deleting a test is visible in the
+  PR diff, and the human approval is the gate; protected paths could be added later.
+- Checks don't watch for cancellation while running; a cancelled ticket notices after the checks finish (at most the
+  checks timeout). Cancellation that stops running processes is part of M5 (finding 5).
 
 ### M2 live run, attempt 1 (2026-10-06): 8 of 11 passed
 

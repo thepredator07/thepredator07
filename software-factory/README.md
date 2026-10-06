@@ -38,7 +38,7 @@ mvn clean verify
 ```
 
 The tests need Docker: Testcontainers starts a real PostgreSQL 16, because the job queue depends on Postgres-only
-features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 287 tests in about a minute (the sandbox tests start real containers). CI
+features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 326 tests in about a minute (the sandbox tests start real containers). CI
 (`.github/workflows/factory-ci.yml`) runs the same command on every push and pull request.
 
 ## What is built vs. not built
@@ -60,7 +60,7 @@ features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 287 test
 | Docker sandbox (`DockerSandboxRunner`): one container per attempt, no network, no credentials, non-root, read-only root, all capabilities dropped, memory/CPU/process limits; code moves in and out as git bundles and the host pushes the branch; a janitor removes orphans | Built (M3), tested on real Docker |
 | Real Claude Code agent | **Not built** (Phase 2): stub in `integration/phase2/ClaudeCodeAgentRunner` |
 | Real GitHub client (`GitHubRestClient`): GitHub App or token auth, complete paged issue listing, ETag caching, trigger time and labeler permission from label events, idempotent PR opening, review-based approval, rate-limit handling | Built (M2), tested against a GitHub API simulator on every build and against real GitHub nightly (passing) |
-| Real checks in the sandbox | **Not built** (Phase 2): stub in `integration/phase2/SandboxChecksRunner` |
+| Real checks (`SandboxChecksRunner`): the repo's check command from `.factory.yml` on the base branch (read on the host, so the agent can't change it), run in the sandbox with a timeout that kills the whole process tree, output capped at 64 K characters keeping start and end | Built (M4), tested on real Docker with a sample repo that has a known failing test |
 | Reviewer agent, auth on the dashboard, metrics export | **Not built** |
 
 ## Configuration
@@ -70,11 +70,13 @@ Everything is set through environment variables; see [`.env.example`](.env.examp
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `FACTORY_INTEGRATIONS` | `fake` | `fake` (Phase 1) or `real` (Phase 2; fails at startup until sandbox, checks and agent exist) |
+| `FACTORY_INTEGRATIONS` | `fake` | `fake` (Phase 1) or `real` (Phase 2; fails at startup until the agent exists, M5) |
 | `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY_PATH` | none | Real GitHub via a GitHub App (recommended) |
 | `GITHUB_TOKEN` | none | Real GitHub via a token, if no App is configured |
 | `FACTORY_MIN_LABELER_PERMISSION` | `write` | Issues labeled by someone with less repo permission are ignored |
 | `FACTORY_SANDBOX_IMAGE`, `FACTORY_SANDBOX_MEMORY`, `FACTORY_SANDBOX_CPUS` | `buildpack-deps:bookworm-scm`, `4g`, `2.0` | Sandbox container (real mode) |
+| `FACTORY_CHECKS_DEFAULT_COMMAND` | none | Check command for repos without `.factory.yml` (real mode); without it such repos fail at once |
+| `FACTORY_CHECKS_DEFAULT_TIMEOUT`, `FACTORY_CHECKS_MAX_TIMEOUT` | `PT10M`, `PT30M` | Checks timeout when the repo sets none, and the most a repo may ask for |
 | `FACTORY_WORK_DIR` | `/var/lib/factory` | Host-side bare clones of target repos (real mode) |
 | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | `jdbc:postgresql://localhost:5432/factory`, `factory`, empty | Postgres connection |
 | `FACTORY_REPO` / `FACTORY_TRIGGER_LABEL` | `example-org/example-repo` / `factory` | Which issues to pick up |
@@ -86,6 +88,20 @@ Everything is set through environment variables; see [`.env.example`](.env.examp
 | `SPRING_PROFILES_ACTIVE` | none | `demo` seeds data |
 
 There are no secrets in the repo. Phase 2 will read `GITHUB_TOKEN` and `ANTHROPIC_API_KEY` from the environment.
+
+## Preparing a target repo (real mode)
+
+Add `.factory.yml` to the repo's base branch:
+
+```yaml
+checks:
+  command: ./mvnw -o -q verify   # any shell command; exit code 0 means the checks pass
+  timeout: 15m                  # optional (default 10m, at most 30m)
+```
+
+The checks run inside the sandbox, which has **no network**: the sandbox image must contain the toolchain, and the
+dependencies must be in the image or the repo. The file is always read from the base branch, so changes the agent makes
+to it have no effect.
 
 ## Try a scenario by hand
 
