@@ -52,7 +52,7 @@ class JobQueueTest extends AbstractIntegrationTest {
     void completedTicketCanBeEnqueuedAgain() {
         long t = ticket(1);
         queue.enqueue(t);
-        queue.complete(queue.claim("w1").orElseThrow().id());
+        assertThat(queue.complete(queue.claim("w1").orElseThrow())).isTrue();
         assertThat(queue.enqueue(t)).isTrue();
     }
 
@@ -72,11 +72,11 @@ class JobQueueTest extends AbstractIntegrationTest {
         queue.enqueue(t);
         Job job = queue.claim("w1").orElseThrow();
 
-        queue.reschedule(job.id(), Duration.ofHours(1), "waiting");
+        assertThat(queue.reschedule(job, Duration.ofHours(1), "waiting")).isTrue();
         assertThat(queue.claim("w1")).isEmpty();
         assertThat(queue.get(job.id()).lastError()).isEqualTo("waiting");
 
-        queue.reschedule(job.id(), Duration.ZERO, "go");
+        queue.wakeUp(t);
         assertThat(queue.claim("w2")).get().extracting(Job::attempts).isEqualTo(2);
     }
 
@@ -97,10 +97,61 @@ class JobQueueTest extends AbstractIntegrationTest {
         long t = ticket(1);
         queue.enqueue(t);
         Job job = queue.claim("w1").orElseThrow();
-        queue.fail(job.id(), "boom");
+        assertThat(queue.fail(job, "boom")).isTrue();
         Job failed = queue.get(job.id());
         assertThat(failed.status()).isEqualTo(JobStatus.FAILED);
         assertThat(failed.lastError()).isEqualTo("boom");
         assertThat(failed.lockedBy()).isNull();
+    }
+
+    // ---- M0: leases are fenced and kept alive by heartbeats ----
+
+    @Test
+    void workerThatLostItsLeaseCannotFinishTheJob() throws Exception {
+        long t = ticket(1);
+        queue.enqueue(t);
+        Job a = queue.claim("worker-A").orElseThrow();
+        Thread.sleep(20);
+        queue.releaseExpiredLeases(Duration.ofMillis(1));
+        Job b = queue.claim("worker-B").orElseThrow();
+        assertThat(b.id()).isEqualTo(a.id());
+
+        assertThat(queue.complete(a)).as("stale complete").isFalse();
+        assertThat(queue.fail(a, "x")).as("stale fail").isFalse();
+        assertThat(queue.reschedule(a, Duration.ZERO, "x")).as("stale reschedule").isFalse();
+        assertThat(queue.heartbeat(a)).as("stale heartbeat").isFalse();
+
+        Job current = queue.get(b.id());
+        assertThat(current.status()).isEqualTo(JobStatus.RUNNING);
+        assertThat(current.lockedBy()).isEqualTo("worker-B");
+        assertThat(queue.complete(b)).isTrue();
+        assertThat(queue.get(b.id()).status()).isEqualTo(JobStatus.DONE);
+    }
+
+    @Test
+    void sameWorkerIdOnALaterAttemptIsStillFenced() throws Exception {
+        long t = ticket(1);
+        queue.enqueue(t);
+        Job first = queue.claim("w").orElseThrow();
+        Thread.sleep(20);
+        queue.releaseExpiredLeases(Duration.ofMillis(1));
+        Job second = queue.claim("w").orElseThrow();
+        assertThat(second.attempts()).isEqualTo(first.attempts() + 1);
+        assertThat(queue.complete(first)).isFalse();
+        assertThat(queue.complete(second)).isTrue();
+    }
+
+    @Test
+    void heartbeatKeepsTheLeaseFromExpiring() throws Exception {
+        long t = ticket(1);
+        queue.enqueue(t);
+        Job job = queue.claim("w").orElseThrow();
+        for (int i = 0; i < 5; i++) {
+            Thread.sleep(40);
+            assertThat(queue.heartbeat(job)).isTrue();
+            assertThat(queue.releaseExpiredLeases(Duration.ofMillis(100))).as("renewed, not expired").isZero();
+        }
+        Thread.sleep(150);
+        assertThat(queue.releaseExpiredLeases(Duration.ofMillis(100))).as("no heartbeat, expired").isEqualTo(1);
     }
 }

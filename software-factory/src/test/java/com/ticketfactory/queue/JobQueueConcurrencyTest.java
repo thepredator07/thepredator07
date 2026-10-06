@@ -82,7 +82,7 @@ class JobQueueConcurrencyTest extends AbstractIntegrationTest {
         Map<Long, AtomicInteger> runsPerTicket = new ConcurrentHashMap<>();
         AtomicInteger inFlight = new AtomicInteger();
         AtomicInteger maxInFlight = new AtomicInteger();
-        JobHandler slowHandler = job -> {
+        JobHandler slowHandler = (job, ctx) -> {
             int now = inFlight.incrementAndGet();
             maxInFlight.accumulateAndGet(now, Math::max);
             runsPerTicket.computeIfAbsent(job.ticketId(), k -> new AtomicInteger()).incrementAndGet();

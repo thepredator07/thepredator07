@@ -13,6 +13,7 @@ import com.ticketfactory.integration.SandboxRunner;
 import com.ticketfactory.integration.StepFailedException;
 import com.ticketfactory.integration.TicketContext;
 import com.ticketfactory.queue.Job;
+import com.ticketfactory.queue.JobContext;
 import com.ticketfactory.queue.JobHandler;
 import com.ticketfactory.queue.JobOutcome;
 import com.ticketfactory.ticket.Ticket;
@@ -23,14 +24,15 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -50,11 +52,11 @@ public class TicketPipeline implements JobHandler {
     private final ChecksRunner checks;
     private final FactoryProperties props;
     private final Clock clock;
-    private final ExecutorService agentExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    private final ExecutorService agentExecutor;
 
     public TicketPipeline(TicketRepository tickets, TicketService transitions, GitHubClient github,
                           SandboxRunner sandbox, AgentRunner agent, ChecksRunner checks, FactoryProperties props,
-                          Clock clock) {
+                          Clock clock, @Qualifier("agentExecutor") ExecutorService agentExecutor) {
         this.tickets = tickets;
         this.transitions = transitions;
         this.github = github;
@@ -63,6 +65,7 @@ public class TicketPipeline implements JobHandler {
         this.checks = checks;
         this.props = props;
         this.clock = clock;
+        this.agentExecutor = agentExecutor;
     }
 
     /** Result of a single step: keep going, or park the job for a while. */
@@ -75,12 +78,16 @@ public class TicketPipeline implements JobHandler {
     }
 
     private static final Step CONTINUE = new Step.Continue();
+    private static final Duration AGENT_WAIT_TICK = Duration.ofMillis(250);
 
     @Override
-    public JobOutcome handle(Job job) {
+    public JobOutcome handle(Job job, JobContext context) {
         long id = job.ticketId();
         tickets.markStarted(id, clock.instant());
         while (true) {
+            if (!context.stillOwned()) {
+                return JobOutcome.abandon("lease lost before step");
+            }
             Ticket ticket = tickets.get(id);
             if (ticket.state().isTerminal()) {
                 cleanup(ticket);
@@ -88,9 +95,11 @@ public class TicketPipeline implements JobHandler {
             }
             try {
                 checkTimeout(ticket);
-                if (step(ticket) instanceof Step.Wait w) {
+                if (step(ticket, context) instanceof Step.Wait w) {
                     return JobOutcome.reschedule(w.delay(), w.note());
                 }
+            } catch (LeaseLostException e) {
+                return JobOutcome.abandon(e.getMessage());
             } catch (GuardrailExceededException e) {
                 failQuietly(id, e.getMessage());
             } catch (StepFailedException e) {
@@ -105,14 +114,14 @@ public class TicketPipeline implements JobHandler {
         }
     }
 
-    private Step step(Ticket t) {
+    private Step step(Ticket t, JobContext context) {
         return switch (t.state()) {
             case RECEIVED -> prepareSandbox(t);
             case SANDBOX_READY -> {
                 transitions.transition(t.id(), SANDBOX_READY, CODING, "Starting coding agent");
                 yield CONTINUE;
             }
-            case CODING -> runAgent(t);
+            case CODING -> runAgent(t, context);
             case CHECKS -> runChecks(t);
             case PR_OPENED -> {
                 github.commentOnIssue(t.repo(), t.issueNumber(), "Opened " + t.prUrl() + " for review.");
@@ -132,7 +141,7 @@ public class TicketPipeline implements JobHandler {
         return CONTINUE;
     }
 
-    private Step runAgent(Ticket t) {
+    private Step runAgent(Ticket t, JobContext context) {
         FactoryProperties.Guardrails limits = props.guardrails();
         int turnsLeft = limits.maxTurns() - t.turns();
         BigDecimal budgetLeft = limits.maxCostUsd().subtract(t.costUsd());
@@ -143,7 +152,7 @@ public class TicketPipeline implements JobHandler {
         AgentRequest request = new AgentRequest(context(t, t.branchName()), t.sandboxId(), prompt(t),
                 t.lastFeedback(), turnsLeft, budgetLeft);
 
-        AgentResult result = callAgentWithTimeout(t, request);
+        AgentResult result = callAgentWithTimeout(t, request, context);
         tickets.recordUsage(t.id(), result.inputTokens(), result.outputTokens(), result.costUsd(), result.turns());
 
         Ticket after = tickets.get(t.id());
@@ -161,15 +170,36 @@ public class TicketPipeline implements JobHandler {
         return CONTINUE;
     }
 
-    private AgentResult callAgentWithTimeout(Ticket t, AgentRequest request) {
-        Duration left = props.guardrails().hardTimeout().minus(elapsed(t));
+    /**
+     * Runs the agent on its own virtual thread and waits for it in short ticks, so the wait can end early when the
+     * hard timeout passes, the ticket is cancelled, or this worker loses its lease.
+     * TODO(phase-2, M5): cancelling the future only interrupts the Java thread; the real runner must also kill the
+     * agent process and its container.
+     */
+    private AgentResult callAgentWithTimeout(Ticket t, AgentRequest request, JobContext context) {
+        Instant deadline = clock.instant().plus(props.guardrails().hardTimeout().minus(elapsed(t)));
         Future<AgentResult> future = agentExecutor.submit(() -> agent.run(request));
         try {
-            return future.get(Math.max(1, left.toMillis()), TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            future.cancel(true);
-            throw new GuardrailExceededException("hard timeout " + props.guardrails().hardTimeout()
-                    + " reached while the agent was running");
+            while (true) {
+                long leftMs = Duration.between(clock.instant(), deadline).toMillis();
+                if (leftMs <= 0) {
+                    future.cancel(true);
+                    throw new GuardrailExceededException("hard timeout " + props.guardrails().hardTimeout()
+                            + " reached while the agent was running");
+                }
+                try {
+                    return future.get(Math.min(leftMs, AGENT_WAIT_TICK.toMillis()), TimeUnit.MILLISECONDS);
+                } catch (TimeoutException tick) {
+                    if (!context.stillOwned()) {
+                        future.cancel(true);
+                        throw new LeaseLostException("lease lost while the agent was running");
+                    }
+                    if (tickets.get(t.id()).state().isTerminal()) {
+                        future.cancel(true);
+                        throw new ConcurrentTransitionException(t.id(), CODING, tickets.get(t.id()).state(), CHECKS);
+                    }
+                }
+            }
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
             if (cause instanceof RuntimeException re) {
@@ -180,6 +210,13 @@ public class TicketPipeline implements JobHandler {
             Thread.currentThread().interrupt();
             future.cancel(true);
             throw new StepFailedException("interrupted while waiting for agent", e);
+        }
+    }
+
+    /** Thrown inside the pipeline when the worker discovers it no longer owns the job. */
+    private static final class LeaseLostException extends RuntimeException {
+        LeaseLostException(String message) {
+            super(message);
         }
     }
 

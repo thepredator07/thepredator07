@@ -23,6 +23,8 @@ management:
         include: health,info
 
 factory:
+  # fake (Phase 1, default) | real (Phase 2, not implemented yet: fails fast at startup)
+  integrations: ${FACTORY_INTEGRATIONS:fake}
   # Target repository and the issue label that opts an issue into the factory.
   repo: ${FACTORY_REPO:example-org/example-repo}
   trigger-label: ${FACTORY_TRIGGER_LABEL:factory}

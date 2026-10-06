@@ -11,9 +11,22 @@ public record FactoryProperties(
         @DefaultValue("example-org/example-repo") String repo,
         @DefaultValue("factory") String triggerLabel,
         @DefaultValue("main") String baseBranch,
+        @DefaultValue("fake") Integrations integrations,
         @DefaultValue Worker worker,
         @DefaultValue Poller poller,
         @DefaultValue Guardrails guardrails) {
+
+    /** Which implementations of GitHubClient, SandboxRunner, AgentRunner and ChecksRunner are wired in. */
+    public enum Integrations {
+        /** In-memory fakes (Phase 1). Also enables the fake-only dashboard actions and /api/fake. */
+        FAKE,
+        /** Real GitHub, Docker sandbox, Claude Code and checks. Not implemented yet (Phase 2, M2-M5). */
+        REAL
+    }
+
+    public boolean fakeMode() {
+        return integrations == Integrations.FAKE;
+    }
 
     public record Worker(
             @DefaultValue("true") boolean enabled,

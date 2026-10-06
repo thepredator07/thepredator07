@@ -71,8 +71,18 @@ RETURNING *;
   ('PENDING','RUNNING')`, so a ticket can never have two live jobs, even across app instances.
 - A job is a ticket's whole journey. When the pipeline has to wait (backoff before a retry, or polling for
   approval), the job is put back to `PENDING` with a later `run_after`. No worker thread sleeps while waiting.
-- Lease recovery: `WorkerPool` regularly returns `RUNNING` jobs whose `locked_at` is older than
-  `factory.worker.lease-timeout` (10 minutes) to `PENDING`. The pipeline resumes from the persisted ticket state.
+- **Leases (M0).** A claim is a lease identified by `(id, locked_by, attempts)`. While the handler runs, a heartbeat
+  thread renews `locked_at` every `lease-timeout / 3`, so a step can run far longer than the lease (a 20-minute agent
+  run is fine with a 10-minute lease). `WorkerPool`'s reaper only returns a job to `PENDING` when its heartbeat has
+  stopped for a whole lease, which means its worker died. The pipeline then resumes from the persisted ticket state.
+- **Fencing (M0).** Heartbeat, complete, fail and reschedule all update `WHERE id AND status='RUNNING' AND
+  locked_by AND attempts` match the lease. A worker that lost its lease changes nothing and logs it. When a heartbeat
+  finds the lease gone, `JobContext.stillOwned()` turns false; the pipeline checks it before every step and while
+  waiting for the agent, and returns `JobOutcome.Abandon` without touching the ticket again.
+- **Database time (M0).** Every queue decision (due, lease age, backoff) uses Postgres `now()`, so app instances
+  with skewed clocks agree. Ticket timestamps shown on the dashboard still come from the app `Clock`.
+- `TwoInstancesTest` runs two full app contexts against one database, with agent runs 2.5× the lease and aggressive
+  reapers in both, and checks that every ticket got exactly one agent run.
 - If the handler throws unexpectedly (a bug or a DB outage), the worker reschedules the job, and after
   `max-job-attempts` (5) marks it `FAILED`.
 
@@ -109,6 +119,16 @@ Configured under `factory.guardrails`, enforced in `TicketPipeline`, and failing
 
 The fake agent reports turns, input and output tokens, and cost on every run, including failed runs, so every limit is
 covered by a test (`TicketPipelineTest`, `HardTimeoutTest`).
+
+## Integration modes (M0)
+
+`factory.integrations` (`FACTORY_INTEGRATIONS`) picks the implementations:
+
+- `fake` (default): `FakeIntegrationsConfig` wires the four fakes, and the fake-only web endpoints exist
+  (`FakeApprovalController` for the Approve button, `FakeGitHubController` for `/api/fake/**`). The dashboard core
+  (`DashboardController`) no longer depends on any fake.
+- `real`: `RealIntegrationsConfig` is active and no fake bean or endpoint is registered. Until M2–M5 land, startup
+  fails with "factory.integrations=real is not implemented yet". Real implementations get registered there.
 
 ## Fakes
 
@@ -147,7 +167,7 @@ enforces the policy too, so a Phase 2 client must call it as well.
 3. `SandboxChecksRunner`: run the target repo's build and test command in the sandbox.
 4. `GitHubRestClient`: GitHub App auth from env, list issues by label, open PRs, read review state (approved, changes
    requested, closed), and comment. Use webhooks instead of polling if latency matters.
-5. A switch `factory.integrations=fake|real` in place of `FakeIntegrationsConfig`.
+5. ~~A switch `factory.integrations=fake|real`~~: done in M0; real implementations register in `RealIntegrationsConfig`.
 6. A reviewer agent before AWAITING_APPROVAL, and "changes requested" back to CODING. That needs a new
    AWAITING_APPROVAL → CODING transition, which is deliberately not allowed today.
 7. Authentication on the dashboard and its POST actions (none in Phase 1).

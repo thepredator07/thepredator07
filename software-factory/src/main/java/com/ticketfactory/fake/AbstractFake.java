@@ -29,6 +29,10 @@ abstract class AbstractFake {
         return calls.count(ticketId);
     }
 
+    public int callCountTotal() {
+        return calls.total();
+    }
+
     /** Records a call and decides whether it fails. */
     protected boolean nextCallFails(TicketContext ticket) {
         FakeBehavior fallback = override != null ? override : configured;

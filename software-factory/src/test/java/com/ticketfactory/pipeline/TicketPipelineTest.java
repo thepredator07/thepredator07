@@ -17,6 +17,9 @@ class TicketPipelineTest extends PipelineTestSupport {
     @Autowired
     TicketService ticketService;
 
+    @Autowired
+    TicketPipeline pipeline;
+
     @Test
     void happyPathVisitsEveryStateAndRecordsUsage() {
         long id = submit(1, "Add CSV export", "Users want CSV.");
@@ -243,5 +246,46 @@ class TicketPipelineTest extends PipelineTestSupport {
         assertThat(all).filteredOn(t -> t.state() == DONE).hasSize(15);
         assertThat(all).filteredOn(t -> t.state() == FAILED).hasSize(5);
         assertThat(github.openedPullRequests()).hasSize(15);
+    }
+
+    // ---- M0: long agent runs react to cancellation and lease loss ----
+
+    @Test
+    void cancellingDuringALongAgentRunStopsWaitingForIt() throws Exception {
+        long id = submit(1, "Slow agent", "fake-agent-delay: PT20S");
+        try (var bg = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            var run = bg.submit(() -> worker.runOnce());
+            long until = System.currentTimeMillis() + 10_000;
+            while (ticket(id).state() != CODING && System.currentTimeMillis() < until) {
+                Thread.sleep(20);
+            }
+            assertThat(ticket(id).state()).isEqualTo(CODING);
+            long cancelledAt = System.nanoTime();
+            ticketService.cancel(id, "user");
+
+            run.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            long stoppedAfterMs = (System.nanoTime() - cancelledAt) / 1_000_000;
+            assertThat(stoppedAfterMs).as("worker stopped waiting soon after cancel").isLessThan(2_000);
+        }
+        assertThat(ticket(id).state()).isEqualTo(CANCELLED);
+        assertThat(queue.findByTicket(id)).singleElement().extracting(Job::status).isEqualTo(JobStatus.DONE);
+        assertThat(sandbox.isLive(ticket(id).sandboxId())).isFalse();
+    }
+
+    @Test
+    void losingTheLeaseDuringAnAgentRunAbandonsWithoutTouchingTheTicket() {
+        long id = submit(1, "Slow agent", "fake-agent-delay: PT20S");
+        Job job = queue.claim("w").orElseThrow();
+        long leaseLostAt = System.currentTimeMillis() + 500;
+
+        long start = System.nanoTime();
+        var outcome = pipeline.handle(job, () -> System.currentTimeMillis() < leaseLostAt);
+        long tookMs = (System.nanoTime() - start) / 1_000_000;
+
+        assertThat(outcome).isInstanceOf(com.ticketfactory.queue.JobOutcome.Abandon.class);
+        assertThat(tookMs).isLessThan(3_000);
+        Ticket t = ticket(id);
+        assertThat(t.state()).as("left for the new owner to continue").isEqualTo(CODING);
+        assertThat(t.turns()).as("no usage recorded by the abandoned run").isZero();
     }
 }

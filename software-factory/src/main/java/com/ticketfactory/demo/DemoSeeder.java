@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Random;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
@@ -39,11 +40,11 @@ public class DemoSeeder implements ApplicationRunner {
 
     private final JdbcClient jdbc;
     private final TicketRepository tickets;
-    private final FakeGitHubClient github;
+    private final ObjectProvider<FakeGitHubClient> github;
     private final FactoryProperties props;
     private final Clock clock;
 
-    public DemoSeeder(JdbcClient jdbc, TicketRepository tickets, FakeGitHubClient github, FactoryProperties props,
+    public DemoSeeder(JdbcClient jdbc, TicketRepository tickets, ObjectProvider<FakeGitHubClient> github, FactoryProperties props,
                       Clock clock) {
         this.jdbc = jdbc;
         this.tickets = tickets;
@@ -109,9 +110,14 @@ public class DemoSeeder implements ApplicationRunner {
         } else {
             log.info("Demo: database already has tickets, not seeding history");
         }
+        FakeGitHubClient fake = github.getIfAvailable();
+        if (fake == null) {
+            log.info("Demo: not in fake mode, no live issues opened");
+            return;
+        }
         int issue = 900;
         for (String[] live : liveIssues()) {
-            github.addIssue(props.repo(), issue++, live[0], live[1], props.triggerLabel());
+            fake.addIssue(props.repo(), issue++, live[0], live[1], props.triggerLabel());
         }
         log.info("Demo: opened {} live issues on the fake GitHub", liveIssues().size());
     }

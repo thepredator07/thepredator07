@@ -158,7 +158,7 @@ engineer; they are rough.
 
 | # | Milestone | Main work | Exit criteria | Est. |
 |---|-----------|-----------|---------------|------|
-| **M0** | **Harden the core** | Findings 1, 2, 3, 9, 11. Heartbeat and fenced job updates; `factory.integrations` switch; fake-only controller; DB time for scheduling; executor bean | All "must exist" tests for leases, fencing and mode switching pass; multi-instance test passes | 2–3 days |
+| **M0** ✅ | **Harden the core** (done, see below) | Findings 1, 2, 3, 9, 11. Heartbeat and fenced job updates; `factory.integrations` switch; fake-only controller; DB time for scheduling; executor bean | All "must exist" tests for leases, fencing and mode switching pass; multi-instance test passes | 2–3 days |
 | **M1** | **Contract tests + attempt model** | Abstract contract test per interface, run against the fakes; Flyway V2 for `attempts` (finding 6); poller reconciliation and paging (finding 7) | Fakes pass all contracts; V2 migrates a DB seeded by the demo without loss; re-labeling a failed issue starts attempt #2 | 3–4 days |
 | **M2** | **Real GitHub client** | `GitHubRestClient` (GitHub App auth from env), issues by label with paging, labeler permission check, open or find PR, review status, comments; host-side push | Contract suite passes against WireMock on every push and against a live test repo nightly; rate limits handled | 3–4 days |
 | **M3** | **Docker sandbox** | `DockerSandboxRunner`: one container per attempt, named `factory-<id>`, idempotent, resource limits, non-root, egress allowlist, no secrets inside; janitor for orphans | Contract and security tests pass on real Docker in CI; killing the app mid-step leaves no orphan after the janitor runs | 4–5 days |
@@ -176,3 +176,17 @@ trustworthy.
 2. Monthly budget for nightly agent evaluation and the pilot.
 3. Which real repo the pilot targets.
 4. Dashboard login method (GitHub OAuth is the natural fit).
+
+## M0 status: done
+
+| Finding | What changed | Proven by |
+|---------|--------------|-----------|
+| 1. Lease expires during long steps | Heartbeat renews the lease every `lease-timeout / 3` (`Worker.heartbeatLoop`) | `WorkerTest.heartbeatKeepsALongJobOwnedWhileReapersRun`, `JobQueueTest.heartbeatKeepsTheLeaseFromExpiring`, `TwoInstancesTest` |
+| 2. Job updates not fenced | All job writes are fenced on `(id, locked_by, attempts)`; `JobContext.stillOwned()`; `JobOutcome.Abandon` | `JobQueueTest.workerThatLostItsLeaseCannotFinishTheJob` (the original repro, now a permanent test), `sameWorkerIdOnALaterAttemptIsStillFenced`, `WorkerTest.handlerSeesLeaseLossAndItsResultIsDiscarded`, `TicketPipelineTest.losingTheLeaseDuringAnAgentRunAbandonsWithoutTouchingTheTicket` |
+| 3. Web layer depends on the fake | `factory.integrations=fake\|real`; `FakeApprovalController`; `RealIntegrationsConfig` fails fast; `DemoSeeder` works without the fake | `IntegrationModeTest` (4 tests) |
+| 9. Mixed clocks | Queue uses Postgres `now()` only; `JobQueue` no longer takes a `Clock` | Existing queue tests on real Postgres |
+| 11. Executor lifecycle | `agentExecutor` is a bean, shut down with the context | Context shutdown in every test run |
+| 5 (partly) | The agent wait reacts to cancellation within 250 ms | `TicketPipelineTest.cancellingDuringALongAgentRunStopsWaitingForIt` |
+
+Mutation check: with the heartbeat turned off, `TwoInstancesTest` and the two `WorkerTest` lease tests fail; with it
+on, they pass. So these tests guard the fix.

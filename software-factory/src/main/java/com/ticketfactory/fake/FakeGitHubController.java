@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import java.util.List;
 import java.util.Map;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** Lets you "open" an issue on the fake GitHub so you can watch it flow through the factory. Phase 1 only. */
 @RestController
 @RequestMapping("/api/fake")
+@ConditionalOnProperty(name = "factory.integrations", havingValue = "fake", matchIfMissing = true)
 public class FakeGitHubController {
 
     private final FakeGitHubClient github;

@@ -46,7 +46,7 @@ features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 164 test
 | Area | Status |
 |------|--------|
 | State machine: 9 states, fixed transition table, invalid moves rejected, every transition stored with a timestamp | Built |
-| Postgres job queue (`FOR UPDATE SKIP LOCKED`), one live job per ticket, lease recovery, virtual-thread workers | Built |
+| Postgres job queue (`FOR UPDATE SKIP LOCKED`), one live job per ticket, heartbeat leases, fenced job updates, virtual-thread workers | Built |
 | Interfaces `GitHubClient`, `SandboxRunner`, `AgentRunner`, `ChecksRunner` with configurable fakes | Built |
 | GitHub poller (labeled issues become tickets, once per issue) | Built (against the fake) |
 | Pipeline: retries with backoff, checks-failed loop back to coding, approval wait, cancellation | Built |
@@ -69,6 +69,7 @@ Everything is set through environment variables; see [`.env.example`](.env.examp
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
+| `FACTORY_INTEGRATIONS` | `fake` | `fake` (Phase 1) or `real` (Phase 2; fails at startup until implemented) |
 | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | `jdbc:postgresql://localhost:5432/factory`, `factory`, empty | Postgres connection |
 | `FACTORY_REPO` / `FACTORY_TRIGGER_LABEL` | `example-org/example-repo` / `factory` | Which issues to pick up |
 | `FACTORY_MAX_COST_USD` | `2.00` | Ticket fails once its total agent cost goes over this |
