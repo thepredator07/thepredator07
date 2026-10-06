@@ -38,7 +38,7 @@ mvn clean verify
 ```
 
 The tests need Docker: Testcontainers starts a real PostgreSQL 16, because the job queue depends on Postgres-only
-features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 164 tests in about 35 seconds. CI
+features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 176 tests in about 40 seconds. CI
 (`.github/workflows/factory-ci.yml`) runs the same command on every push and pull request.
 
 ## What is built vs. not built
