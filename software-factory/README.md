@@ -38,7 +38,7 @@ mvn clean verify
 ```
 
 The tests need Docker: Testcontainers starts a real PostgreSQL 16, because the job queue depends on Postgres-only
-features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 164 tests in about 35 seconds. CI
+features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 176 tests in about 40 seconds. CI
 (`.github/workflows/factory-ci.yml`) runs the same command on every push and pull request.
 
 ## What is built vs. not built
@@ -46,7 +46,7 @@ features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 164 test
 | Area | Status |
 |------|--------|
 | State machine: 9 states, fixed transition table, invalid moves rejected, every transition stored with a timestamp | Built |
-| Postgres job queue (`FOR UPDATE SKIP LOCKED`), one live job per ticket, lease recovery, virtual-thread workers | Built |
+| Postgres job queue (`FOR UPDATE SKIP LOCKED`), one live job per ticket, heartbeat leases, fenced job updates, virtual-thread workers | Built |
 | Interfaces `GitHubClient`, `SandboxRunner`, `AgentRunner`, `ChecksRunner` with configurable fakes | Built |
 | GitHub poller (labeled issues become tickets, once per issue) | Built (against the fake) |
 | Pipeline: retries with backoff, checks-failed loop back to coding, approval wait, cancellation | Built |
@@ -69,6 +69,7 @@ Everything is set through environment variables; see [`.env.example`](.env.examp
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
+| `FACTORY_INTEGRATIONS` | `fake` | `fake` (Phase 1) or `real` (Phase 2; fails at startup until implemented) |
 | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | `jdbc:postgresql://localhost:5432/factory`, `factory`, empty | Postgres connection |
 | `FACTORY_REPO` / `FACTORY_TRIGGER_LABEL` | `example-org/example-repo` / `factory` | Which issues to pick up |
 | `FACTORY_MAX_COST_USD` | `2.00` | Ticket fails once its total agent cost goes over this |
@@ -106,3 +107,4 @@ curl -X POST localhost:8080/api/fake/issues -H 'Content-Type: application/json' 
 - [MORNING.md](MORNING.md): 5-minute hands-on check, plus the test results table
 - [docs/DESIGN.md](docs/DESIGN.md): architecture, state machine, queue, guardrails, Phase 2 plan
 - [docs/DECISIONS.md](docs/DECISIONS.md): every judgment call made during the build
+- [docs/PHASE2-PLAN.md](docs/PHASE2-PLAN.md): architecture review, Phase 2 readiness findings, test strategy, milestone plan

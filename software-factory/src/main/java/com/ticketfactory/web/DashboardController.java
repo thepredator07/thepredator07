@@ -1,8 +1,6 @@
 package com.ticketfactory.web;
 
 import com.ticketfactory.FactoryProperties;
-import com.ticketfactory.fake.FakeGitHubClient;
-import com.ticketfactory.integration.GitHubClient.PrStatus;
 import com.ticketfactory.queue.JobQueue;
 import com.ticketfactory.stats.Stats;
 import com.ticketfactory.stats.StatsService;
@@ -32,18 +30,16 @@ public class DashboardController {
     private final TicketService ticketService;
     private final JobQueue queue;
     private final StatsService stats;
-    private final FakeGitHubClient fakeGitHub;
     private final FactoryProperties props;
     private final Clock clock;
 
     public DashboardController(TicketRepository tickets, TicketService ticketService, JobQueue queue,
-                               StatsService stats, FakeGitHubClient fakeGitHub, FactoryProperties props,
+                               StatsService stats, FactoryProperties props,
                                Clock clock) {
         this.tickets = tickets;
         this.ticketService = ticketService;
         this.queue = queue;
         this.stats = stats;
-        this.fakeGitHub = fakeGitHub;
         this.props = props;
         this.clock = clock;
     }
@@ -95,20 +91,6 @@ public class DashboardController {
     public String cancel(@PathVariable long id, RedirectAttributes redirect) {
         boolean cancelled = ticketService.cancel(id, "Cancelled from the dashboard");
         redirect.addFlashAttribute("message", cancelled ? "Ticket cancelled." : "Ticket was already finished.");
-        return "redirect:/tickets/" + id;
-    }
-
-    /** Phase 1 stand-in for a human approving the PR on GitHub. */
-    @PostMapping("/tickets/{id}/approve")
-    public String approve(@PathVariable long id, RedirectAttributes redirect) {
-        Ticket t = tickets.get(id);
-        if (t.state() != TicketState.AWAITING_APPROVAL || t.prNumber() == null) {
-            redirect.addFlashAttribute("message", "Only tickets awaiting approval can be approved.");
-        } else {
-            fakeGitHub.setPullRequestStatus(t.prNumber(), PrStatus.APPROVED);
-            queue.wakeUp(id);
-            redirect.addFlashAttribute("message", "PR #" + t.prNumber() + " approved on the fake GitHub.");
-        }
         return "redirect:/tickets/" + id;
     }
 }

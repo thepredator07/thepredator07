@@ -1,14 +1,12 @@
 package com.ticketfactory.fake;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * Phase 1 wiring: every integration is a fake.
- * TODO(phase-2): add a {@code factory.integrations=real} switch that registers the implementations in
- * {@code com.ticketfactory.integration.phase2} instead.
- */
+/** Wires every integration as a fake. Active when {@code factory.integrations=fake} (the default). */
 @Configuration(proxyBeanMethods = false)
+@ConditionalOnProperty(name = "factory.integrations", havingValue = "fake", matchIfMissing = true)
 public class FakeIntegrationsConfig {
 
     @Bean

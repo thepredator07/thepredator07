@@ -18,6 +18,10 @@ final class CallCounter {
         return c == null ? 0 : c.get();
     }
 
+    int total() {
+        return calls.values().stream().mapToInt(AtomicInteger::get).sum();
+    }
+
     void reset() {
         calls.clear();
     }

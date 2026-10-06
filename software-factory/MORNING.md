@@ -61,7 +61,7 @@ the Approve button. All the directives are listed in README.md.
 cd software-factory && mvn clean verify      # needs Docker running (Testcontainers)
 ```
 
-Expect `Tests run: 164, Failures: 0, Errors: 0, Skipped: 0` and `BUILD SUCCESS` (about 35 seconds after
+Expect `Tests run: 176, Failures: 0, Errors: 0, Skipped: 0` and `BUILD SUCCESS` (about 40 seconds after
 dependencies are downloaded).
 
 ---

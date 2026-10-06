@@ -13,11 +13,19 @@ public sealed interface JobOutcome {
     record Reschedule(Duration delay, String note) implements JobOutcome {
     }
 
+    /** The handler noticed it lost the lease and stopped. Leave the job alone: someone else owns it now. */
+    record Abandon(String reason) implements JobOutcome {
+    }
+
     static JobOutcome complete() {
         return new Complete();
     }
 
     static JobOutcome reschedule(Duration delay, String note) {
         return new Reschedule(delay, note);
+    }
+
+    static JobOutcome abandon(String reason) {
+        return new Abandon(reason);
     }
 }

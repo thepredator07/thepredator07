@@ -4,5 +4,5 @@ package com.ticketfactory.queue;
 @FunctionalInterface
 public interface JobHandler {
 
-    JobOutcome handle(Job job);
+    JobOutcome handle(Job job, JobContext context);
 }

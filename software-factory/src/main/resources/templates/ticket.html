@@ -10,7 +10,7 @@
     <span class="badge" th:classappend="${t.state}" th:text="${t.state}">STATE</span></h1>
 
   <div class="actions" th:unless="${t.state.terminal}">
-    <form th:if="${t.state.name() == 'AWAITING_APPROVAL'}" method="post" th:action="@{/tickets/{id}/approve(id=${t.id})}">
+    <form th:if="${props.fakeMode() and t.state.name() == 'AWAITING_APPROVAL'}" method="post" th:action="@{/tickets/{id}/approve(id=${t.id})}">
       <button class="primary" type="submit">Approve PR (fake GitHub)</button>
     </form>
     <form method="post" th:action="@{/tickets/{id}/cancel(id=${t.id})}">
