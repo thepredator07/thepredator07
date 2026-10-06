@@ -86,10 +86,16 @@ class LiveGitHubClientContractTest extends GitHubClientContract {
     @Override
     protected int openIssue(String title, String body, String... labels) {
         int n = call("POST", "/repos/" + repo + "/issues",
-                Map.of("title", "[contract test] " + title, "body", body, "labels", List.of(labels)))
+                Map.of("title", expectedTitle(title), "body", body, "labels", List.of(labels)))
                 .path("number").asInt();
         createdIssues.add(n);
         return n;
+    }
+
+    /** Issues made by this test are marked, so they are easy to spot (and ignore) in the test repo. */
+    @Override
+    protected String expectedTitle(String title) {
+        return "[contract test] " + title;
     }
 
     @Override

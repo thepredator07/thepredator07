@@ -259,4 +259,11 @@ Fixes (decisions 50–52):
 - The simulator can lag the same way. With the lag on and the retry off it reproduces the same 3 failures; with the
   retry on it passes.
 
+### M2 live run, attempt 2: 10 of 11 passed
+
+All three listing tests now pass on real GitHub; the lag fix works. The last failure was in the live **test fixture**,
+not the client. It prefixes the issues it creates with `[contract test] ` so they're easy to spot, but the contract then
+expected the bare title. GitHub returned exactly what was created. Fix: the fixture declares its prefix
+(`expectedTitle`), and the contract compares against that.
+
 Next: re-run the live workflow. M2 is done when it passes.
