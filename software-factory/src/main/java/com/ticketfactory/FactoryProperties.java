@@ -38,9 +38,15 @@ public record FactoryProperties(
             @DefaultValue("5") int maxJobAttempts) {
     }
 
+    /**
+     * @param missingPollsBeforeCancel how many polls in a row an issue must be missing (closed or unlabeled) before its
+     *                                 running attempt is cancelled. GitHub's issue listing lags writes by a few
+     *                                 seconds, so a single miss can be a stale read.
+     */
     public record Poller(
             @DefaultValue("true") boolean enabled,
-            @DefaultValue("PT10S") Duration interval) {
+            @DefaultValue("PT10S") Duration interval,
+            @DefaultValue("2") int missingPollsBeforeCancel) {
     }
 
     /** Hard limits per ticket. Breaching any of them fails the ticket. */

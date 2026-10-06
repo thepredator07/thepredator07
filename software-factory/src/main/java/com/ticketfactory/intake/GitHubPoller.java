@@ -20,7 +20,9 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li>an open issue with the trigger label and no running attempt starts one, if its trigger is new (re-applying
  *       the label to a finished issue starts the next attempt);</li>
- *   <li>a running attempt whose issue was closed or lost the label is cancelled, as long as no PR exists yet.</li>
+ *   <li>a running attempt whose issue was closed or lost the label is cancelled, as long as no PR exists yet, once
+ *       the issue has been missing for {@code missing-polls-before-cancel} polls in a row (GitHub's listing lags
+ *       behind writes, so one miss can be stale).</li>
  * </ul>
  */
 @Component
@@ -43,6 +45,8 @@ public class GitHubPoller {
     private final TicketRepository tickets;
     private final TicketService ticketService;
     private final FactoryProperties props;
+    /** Consecutive polls each running ticket's issue has been missing from the listing. */
+    private final java.util.Map<Long, Integer> misses = new java.util.concurrent.ConcurrentHashMap<>();
 
     public GitHubPoller(GitHubClient github, TicketIntake intake, TicketRepository tickets,
                         TicketService ticketService, FactoryProperties props) {
@@ -81,13 +85,25 @@ public class GitHubPoller {
         }
         Set<Integer> stillWanted = open.stream().map(GitHubClient.Issue::number).collect(Collectors.toSet());
         int cancelled = 0;
+        Set<Long> active = new java.util.HashSet<>();
         for (Ticket t : tickets.findActive(props.repo())) {
-            if (!stillWanted.contains(t.issueNumber()) && CANCELLABLE_BY_ISSUE.contains(t.state())) {
-                if (cancel(t)) {
-                    cancelled++;
-                }
+            active.add(t.id());
+            if (stillWanted.contains(t.issueNumber()) || !CANCELLABLE_BY_ISSUE.contains(t.state())) {
+                misses.remove(t.id());
+                continue;
+            }
+            int missed = misses.merge(t.id(), 1, Integer::sum);
+            if (missed < props.poller().missingPollsBeforeCancel()) {
+                log.info("Issue {}#{} missing from the listing ({} of {} polls before cancelling ticket {})",
+                        t.repo(), t.issueNumber(), missed, props.poller().missingPollsBeforeCancel(), t.id());
+                continue;
+            }
+            misses.remove(t.id());
+            if (cancel(t)) {
+                cancelled++;
             }
         }
+        misses.keySet().retainAll(active);
         return new PollResult(created, cancelled);
     }
 

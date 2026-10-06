@@ -80,7 +80,9 @@ class GitHubPollerTest extends AbstractIntegrationTest {
         poller.pollOnce();
         github.closeIssue(props.repo(), 1);
 
-        assertThat(poller.poll().cancelled()).isEqualTo(1);
+        assertThat(poller.poll().cancelled()).as("one miss could be a stale listing").isZero();
+        assertThat(only(1).state()).isEqualTo(TicketState.RECEIVED);
+        assertThat(poller.poll().cancelled()).as("missing twice in a row").isEqualTo(1);
 
         Ticket t = only(1);
         assertThat(t.state()).isEqualTo(TicketState.CANCELLED);
@@ -96,6 +98,7 @@ class GitHubPollerTest extends AbstractIntegrationTest {
         github.removeLabel(props.repo(), 2, props.triggerLabel());
 
         poller.pollOnce();
+        poller.pollOnce();
 
         assertThat(only(2).state()).isEqualTo(TicketState.CANCELLED);
     }
@@ -110,6 +113,7 @@ class GitHubPollerTest extends AbstractIntegrationTest {
         assertThat(waiting.state()).isEqualTo(TicketState.AWAITING_APPROVAL);
 
         github.closeIssue(props.repo(), 3);
+        assertThat(poller.poll().cancelled()).isZero();
         assertThat(poller.poll().cancelled()).isZero();
         assertThat(only(3).state()).isEqualTo(TicketState.AWAITING_APPROVAL);
 
@@ -130,5 +134,21 @@ class GitHubPollerTest extends AbstractIntegrationTest {
         poller.scheduledPoll(); // the scheduled path logs and carries on
 
         assertThat(only(4).state()).isEqualTo(TicketState.RECEIVED);
+    }
+
+    @Test
+    void anIssueThatReappearsAfterOneMissedPollIsNotCancelled() {
+        // GitHub's listing can briefly show stale data right after a write (seen in the first live run).
+        github.addIssue(props.repo(), 5, "Flicker", "", props.triggerLabel());
+        poller.pollOnce();
+        github.removeLabel(props.repo(), 5, props.triggerLabel());
+        poller.pollOnce();                                            // miss 1
+        github.addIssue(props.repo(), 5, "Flicker", "", props.triggerLabel()); // back (same ticket keeps running)
+        poller.pollOnce();                                            // present: count resets
+        github.removeLabel(props.repo(), 5, props.triggerLabel());
+        poller.pollOnce();                                            // miss 1 again, not 2
+
+        assertThat(tickets.attemptsFor(props.repo(), 5)).extracting(Ticket::state)
+                .containsExactly(TicketState.RECEIVED);
     }
 }

@@ -88,6 +88,10 @@ public class GitHubApiSimulator implements AutoCloseable {
     private final AtomicInteger numbers = new AtomicInteger();
     private final AtomicInteger issuedAppTokens = new AtomicInteger();
     private Instant clock = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+    /** Stale-read emulation: after a write, this many issue listings still return the state before it. */
+    private int listingLag;
+    private int staleListingsLeft;
+    private ArrayNode staleListing;
     private PublicKey appPublicKey;
     private String appId;
     private long appTokenLifetimeSeconds = 3600;
@@ -118,7 +122,25 @@ public class GitHubApiSimulator implements AutoCloseable {
         return clock;
     }
 
+    /**
+     * Makes the issue listing lag like GitHub's does: after each write, the next {@code staleReads} listings return
+     * the issues as they were before it.
+     */
+    public synchronized void setListingLag(int staleReads) {
+        listingLag = staleReads;
+    }
+
+    private void beforeWrite() {
+        if (listingLag > 0) {
+            if (staleListingsLeft == 0) {
+                staleListing = currentListing(null);
+            }
+            staleListingsLeft = listingLag;
+        }
+    }
+
     public synchronized int createIssue(String title, String body, String labeler, String... labels) {
+        beforeWrite();
         SimIssue i = new SimIssue();
         i.number = numbers.incrementAndGet();
         i.title = title;
@@ -140,6 +162,7 @@ public class GitHubApiSimulator implements AutoCloseable {
     }
 
     public synchronized void label(int number, String label, String actor) {
+        beforeWrite();
         SimIssue i = issues.get(number);
         i.labels.add(label);
         i.updatedAt = tick();
@@ -150,6 +173,7 @@ public class GitHubApiSimulator implements AutoCloseable {
     }
 
     public synchronized void unlabel(int number, String label, String actor) {
+        beforeWrite();
         SimIssue i = issues.get(number);
         i.labels.remove(label);
         i.updatedAt = tick();
@@ -169,6 +193,7 @@ public class GitHubApiSimulator implements AutoCloseable {
     }
 
     public synchronized void closeIssue(int number) {
+        beforeWrite();
         issues.get(number).open = false;
         issues.get(number).updatedAt = tick();
     }
@@ -311,27 +336,48 @@ public class GitHubApiSimulator implements AutoCloseable {
 
     private void listIssues(HttpExchange ex, Map<String, String> q) throws IOException {
         String label = q.get("labels");
-        ArrayNode arr = JSON.createArrayNode();
+        ArrayNode arr;
         synchronized (this) {
-            for (SimIssue i : issues.values()) {
-                if (i.open && (label == null || i.labels.contains(label))) {
-                    ObjectNode o = arr.addObject().put("number", i.number).put("title", i.title)
-                            .put("created_at", i.createdAt.toString()).put("updated_at", i.updatedAt.toString());
-                    if (i.body == null) {
-                        o.putNull("body");
-                    } else {
-                        o.put("body", i.body);
+            if (staleListingsLeft > 0) {
+                staleListingsLeft--;
+                arr = JSON.createArrayNode();
+                for (JsonNode i : staleListing) {
+                    boolean hasLabel = false;
+                    for (JsonNode l : i.path("labels")) {
+                        hasLabel |= l.path("name").asText().equals(label);
                     }
-                    o.putObject("user").put("login", i.author);
-                    ArrayNode labels = o.putArray("labels");
-                    i.labels.forEach(l -> labels.addObject().put("name", l));
-                    if (i.pullRequest) {
-                        o.putObject("pull_request").put("url", "x");
+                    if (label == null || hasLabel) {
+                        arr.add(i);
                     }
                 }
+            } else {
+                arr = currentListing(label);
             }
         }
         sendPage(ex, arr, q);
+    }
+
+    /** All open issues (optionally with {@code label}), as the issues API returns them. */
+    private ArrayNode currentListing(String label) {
+        ArrayNode arr = JSON.createArrayNode();
+        for (SimIssue i : issues.values()) {
+            if (i.open && (label == null || i.labels.contains(label))) {
+                ObjectNode o = arr.addObject().put("number", i.number).put("title", i.title)
+                        .put("created_at", i.createdAt.toString()).put("updated_at", i.updatedAt.toString());
+                if (i.body == null) {
+                    o.putNull("body");
+                } else {
+                    o.put("body", i.body);
+                }
+                o.putObject("user").put("login", i.author);
+                ArrayNode labels = o.putArray("labels");
+                i.labels.forEach(l -> labels.addObject().put("name", l));
+                if (i.pullRequest) {
+                    o.putObject("pull_request").put("url", "x");
+                }
+            }
+        }
+        return arr;
     }
 
     private void listEvents(HttpExchange ex, int number, Map<String, String> q) throws IOException {

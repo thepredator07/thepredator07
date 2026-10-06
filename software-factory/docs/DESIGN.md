@@ -147,7 +147,7 @@ the state machine once.
 ## Reconciliation (M1)
 
 Every poll compares running attempts with the issue tracker. An attempt whose issue was closed or lost the label is
-cancelled **only while it has no PR yet** (RECEIVED, SANDBOX_READY, CODING, CHECKS). Once a PR exists, the PR
+cancelled **only while it has no PR yet** (RECEIVED, SANDBOX_READY, CODING, CHECKS), and only after the issue has been missing from **two polls in a row**: GitHub's listing lags behind writes by a few seconds, so one miss can be a stale read. Once a PR exists, the PR
 decides: merging a PR with "Closes #N" closes the issue, and that must not cancel a ticket that is about to be DONE.
 `listOpenIssues` must be complete (implementations page internally) and throw rather than return a partial list;
 a failed listing cancels nothing.

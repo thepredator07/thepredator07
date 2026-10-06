@@ -9,8 +9,10 @@ import com.ticketfactory.integration.GitHubClient.Issue;
 import com.ticketfactory.integration.GitHubClient.PrStatus;
 import com.ticketfactory.integration.GitHubClient.PullRequest;
 import com.ticketfactory.integration.GitHubClient.PullRequestRequest;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.function.Predicate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -45,6 +47,36 @@ public abstract class GitHubClientContract {
     protected void prepareBranch(String head) {
     }
 
+    /**
+     * How long a fresh change (issue opened, labeled, closed) may take to show up in the issue listing. GitHub's
+     * labelled-issue listing lags a few seconds behind writes (seen in the first live run); the fake and the
+     * simulator are immediate, so they keep zero and must answer right away.
+     */
+    protected Duration listingConsistencyWait() {
+        return Duration.ZERO;
+    }
+
+    /** Lists repeatedly until {@code ready} holds or {@link #listingConsistencyWait()} runs out; returns the last list. */
+    protected List<Issue> listUntil(Predicate<List<Issue>> ready) {
+        Instant deadline = Instant.now().plus(listingConsistencyWait());
+        while (true) {
+            List<Issue> issues = client().listOpenIssues(repo(), LABEL);
+            if (ready.test(issues) || !Instant.now().isBefore(deadline)) {
+                return issues;
+            }
+            try {
+                Thread.sleep(2_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return issues;
+            }
+        }
+    }
+
+    private static List<Integer> numbers(List<Issue> issues) {
+        return issues.stream().map(Issue::number).toList();
+    }
+
     /** How many issues to create for the paging test. Real implementations can lower it to save API calls. */
     protected int manyIssues() {
         return 150;
@@ -65,7 +97,7 @@ public abstract class GitHubClientContract {
         int wanted = openIssue("Wanted", "body", LABEL, "bug");
         int unlabeled = openIssue("Unlabeled", "body", "bug");
 
-        List<Integer> numbers = client().listOpenIssues(repo(), LABEL).stream().map(Issue::number).toList();
+        List<Integer> numbers = numbers(listUntil(list -> numbers(list).contains(wanted)));
 
         assertThat(numbers).contains(wanted).doesNotContain(unlabeled);
     }
@@ -75,8 +107,8 @@ public abstract class GitHubClientContract {
         Instant before = Instant.now().minusSeconds(5);
         int n = openIssue("Add CSV export", "Users want CSV.", LABEL);
 
-        Issue issue = client().listOpenIssues(repo(), LABEL).stream().filter(i -> i.number() == n).findFirst()
-                .orElseThrow();
+        Issue issue = listUntil(list -> numbers(list).contains(n)).stream().filter(i -> i.number() == n).findFirst()
+                .orElseThrow(() -> new AssertionError("issue #" + n + " never appeared in the listing"));
 
         assertThat(issue.repo()).isEqualTo(repo());
         assertThat(issue.title()).isEqualTo("Add CSV export");
@@ -88,10 +120,12 @@ public abstract class GitHubClientContract {
     @Test
     void listingIsCompleteBeyondOnePage() {
         int count = manyIssues();
+        List<Integer> created = new java.util.ArrayList<>();
         for (int i = 0; i < count; i++) {
-            openIssue("Bulk " + i, "", LABEL);
+            created.add(openIssue("Bulk " + i, "", LABEL));
         }
-        assertThat(client().listOpenIssues(repo(), LABEL)).hasSizeGreaterThanOrEqualTo(count);
+        List<Integer> listed = numbers(listUntil(list -> numbers(list).containsAll(created)));
+        assertThat(listed).as("every issue, across pages").containsAll(created);
     }
 
     @Test
