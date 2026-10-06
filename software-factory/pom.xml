@@ -19,8 +19,9 @@
 
     <properties>
         <java.version>21</java.version>
-        <!-- Tests tagged "live" talk to real GitHub; run them with: mvn test -Dgroups=live -Dsurefire.excludedGroups= -->
-        <surefire.excludedGroups>live</surefire.excludedGroups>
+        <!-- Tests tagged "live" talk to real GitHub, "agent-eval" to the real model API (costs money).
+             Run them with: mvn test -Dgroups=live -Dsurefire.excludedGroups= (or -Dgroups=agent-eval) -->
+        <surefire.excludedGroups>live,agent-eval</surefire.excludedGroups>
         <!-- Same version Testcontainers uses, so there is one docker-java on the classpath -->
         <docker-java.version>3.4.2</docker-java.version>
     </properties>

@@ -52,6 +52,10 @@ public class SandboxChecksRunner implements ChecksRunner {
     @Override
     public ChecksResult run(TicketContext ticket, String sandboxId) {
         ChecksConfig config = config(ticket.repo());
+        if (sandbox.proxy() != null) {
+            // Normally already stopped after the agent run; makes sure checks never have a way out.
+            sandbox.proxy().stop(ticket.ticketId());
+        }
         BoundedOutput out = new BoundedOutput(HEAD_BYTES, TAIL_BYTES);
         long seconds = Math.max(1, config.timeout().toSeconds());
         long started = System.nanoTime();

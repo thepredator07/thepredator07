@@ -27,7 +27,7 @@ Code is under `src/main/java/com/ticketfactory/`:
 |---------|----------|
 | `ticket` | `TicketState`, `TicketStateMachine` (transition table), `TicketService` (the only writer of state), `TicketRepository` |
 | `queue` | `JobQueue` (Postgres queue), `Worker`, `WorkerPool`, `JobHandler`/`JobOutcome` |
-| `integration` | The four interfaces, `TicketContext`, `BranchPolicy`, `StepFailedException`; `phase2/` holds the stubs |
+| `integration` | The four interfaces, `TicketContext`, `BranchPolicy`, `StepFailedException`; real implementations in `github/`, `docker/`, `checks/`, `agent/`, wired by `real/` |
 | `fake` | Fakes, `FakeBehavior`/`FakeMode`, `FakeScript` (per-ticket directives), `FakeGitHubController` |
 | `intake` | `GitHubPoller`, `TicketIntake` |
 | `pipeline` | `TicketPipeline` (the orchestrator), `GuardrailExceededException` |
@@ -127,8 +127,8 @@ covered by a test (`TicketPipelineTest`, `HardTimeoutTest`).
 - `fake` (default): `FakeIntegrationsConfig` wires the four fakes, and the fake-only web endpoints exist
   (`FakeApprovalController` for the Approve button, `FakeGitHubController` for `/api/fake/**`). The dashboard core
   (`DashboardController`) no longer depends on any fake.
-- `real`: `RealIntegrationsConfig` is active and no fake bean or endpoint is registered. Until M2–M5 land, startup
-  fails with "factory.integrations=real is not implemented yet". Real implementations get registered there.
+- `real`: `RealIntegrationsConfig` wires the real GitHub client, Docker sandbox, checks runner and Claude Code agent;
+  no fake bean or endpoint is registered. Startup fails with a clear message when no model API credential is set.
 
 ## Tickets are attempts (M1)
 
@@ -235,8 +235,32 @@ checks:
 | Misconfiguration | No file (and no `factory.checks.default-command`), invalid YAML, or no `checks.command`: `UnrecoverableStepException`, and the ticket fails at once with the reason. |
 | Isolation | Same sandbox, so no network: dependencies must be in the image or the repo. |
 
-**Network for the agent (M5):** the sandbox has none today. The agent will need to reach the model API, and nothing
-else. That needs an egress proxy with a host allowlist, added with the agent in M5 rather than here (decision 44).
+### The agent and its only way out (M5)
+
+```
+  sandbox factory-<id>                        model proxy factory-proxy-<id>          Anthropic API
+  ┌───────────────────────────┐  internal     ┌──────────────────────────────┐ egress  ┌──────────────┐
+  │ claude -p (uid 1000)      │  network      │ nginx: /v1/* only, 403 else  │ network │              │
+  │ ANTHROPIC_BASE_URL=       │──────────────▶│ swaps the placeholder for    │────────▶│ /v1/messages │
+  │  http://model-proxy:8080  │ factory-net-  │ the real key or token        │         │              │
+  │ credential = placeholder  │   <id>        │ runs only during agent runs  │         └──────────────┘
+  └───────────────────────────┘               └──────────────────────────────┘
+```
+
+| Property | How |
+|----------|-----|
+| No credential in the sandbox | The sandbox sets `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` to a fixed placeholder. The per-ticket proxy replaces it with the real one (`x-api-key` for an API key, `Authorization: Bearer` for a subscription token; Claude Code adds the OAuth beta header itself). So the agent, the code it writes and the checks can never read, print or commit the token. Verified with the real CLI: a tool call that dumps every process environment finds only the placeholder. |
+| Only the model API | The sandbox is attached only to its own **internal** network. The proxy is the only other member; it forwards `/v1/*` to the configured upstream (TLS verified) and returns 403 for anything else. Direct connections to the upstream, other containers or the internet fail. |
+| Only while the agent runs | The runner starts the proxy before `claude` and stops it afterwards; the checks runner stops it again before checks. During checks the sandbox reaches nothing. |
+| Limited tools | `--tools Bash,Read,Edit,Write` and `--strict-mcp-config`. Web search and fetch run through the model API, and remote triggers or scheduling act on the account, so the sandbox network can't stop them; they are left out so an issue can't use them to leak code. |
+| Limits | `--max-turns` and `--max-budget-usd` with what is left of the ticket's budget; the pipeline also checks the reported usage against the guardrails after each run. |
+| Kill on cancel | `setsid --wait sh -c 'echo $$ > pidfile; exec timeout -k 10s <n>s claude ...'`. When the run ends, is cancelled (the pipeline interrupts the agent thread) or times out, the runner kills the session and process group, including background processes the agent started. Measured: under 10 s from cancel to nothing left. |
+| Usage | `--output-format stream-json`, parsed as it streams (`StreamJsonParser`): turns, input tokens (including cache reads and writes), output tokens and cost from the final `result` event. A run cut off before it still reports the turns and tokens it streamed; its cost is then unknown (0). |
+| Commit | Afterwards the runner commits the working tree on the ticket branch (`git add -A`). A run that left the ticket branch is an error; one that changed nothing has failed. |
+| Cleanup | The proxy and network are labelled like the sandbox; `destroy` removes all three, and the janitor also finds a proxy or network whose sandbox is already gone. |
+
+The sandbox image (`sandbox/Dockerfile`) adds the Claude Code native binary, pinned to a version and checked against
+the SHA-512 the npm registry publishes for it.
 
 ## Fakes
 
@@ -266,15 +290,12 @@ plus the full transition log and the job rows.
 `master`, or equals the base. The pipeline always uses `BranchPolicy.branchFor(ticketId)`, and the fake GitHub
 enforces the policy too, so a Phase 2 client must call it as well.
 
-## Phase 2 plan (not built)
+## Phase 2 plan
 
-1. `DockerSandboxRunner`: one container per ticket, repo cloned on `factory/<id>`, network limited to GitHub and the
-   model API, CPU and memory limits, destroyed when the ticket ends.
-2. `ClaudeCodeAgentRunner`: run Claude Code headless in the sandbox with `--max-turns` set to the remaining budget,
-   parse the usage it reports into `AgentResult`, push commits to `factory/<id>`.
+1. ~~`DockerSandboxRunner`~~: done in M3.
+2. ~~`ClaudeCodeAgentRunner`~~: done in M5 (see "The agent and its only way out").
 3. ~~`SandboxChecksRunner`~~: done in M4 (see "Checks in the sandbox").
-4. `GitHubRestClient`: GitHub App auth from env, list issues by label, open PRs, read review state (approved, changes
-   requested, closed), and comment. Use webhooks instead of polling if latency matters.
+4. ~~`GitHubRestClient`~~: done in M2. Webhooks instead of polling are planned for M6.
 5. ~~A switch `factory.integrations=fake|real`~~: done in M0; real implementations register in `RealIntegrationsConfig`.
 6. A reviewer agent before AWAITING_APPROVAL, and "changes requested" back to CODING. That needs a new
    AWAITING_APPROVAL → CODING transition, which is deliberately not allowed today.

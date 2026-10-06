@@ -43,11 +43,16 @@ public final class DockerSandboxFixture implements AutoCloseable {
     }
 
     public DockerSandboxRunner runnerWithImage(String image) {
+        return runnerWithProxy(image, null);
+    }
+
+    /** A runner whose sandboxes reach the model API through {@code proxy} (null: no network). */
+    public DockerSandboxRunner runnerWithProxy(String image, ModelApiProxy proxy) {
         SandboxProperties props = new SandboxProperties(image, "1g", 1.0, 256, "256m", "128m", root.resolve("host"),
                 "file://" + root.resolve("remotes") + "/{repo}.git", Duration.ofMinutes(2), Duration.ofMinutes(10));
         return new DockerSandboxRunner(docker,
                 new HostGit(props.hostWorkDir(), props.cloneUrlTemplate(), () -> FAKE_TOKEN, props.gitTimeout()),
-                props, "main");
+                props, "main", proxy);
     }
 
     /** Commits {@code files} (path to content) to {@code main} on the remote, as a maintainer pushing would. */
@@ -64,7 +69,26 @@ public final class DockerSandboxFixture implements AutoCloseable {
             throw new IllegalStateException(e);
         }
         git(work, "add", ".");
-        git(work, "-c", "user.name=seed", "-c", "user.email=seed@x", "commit", "-q", "-m", message);
+        git(work, "-c", "user.name=seed", "-c", "user.email=seed@x", "commit", "-q", "--allow-empty", "-m", message);
+        git(work, "push", "-q", "origin", "main");
+    }
+
+    /** Replaces everything on {@code main} with {@code files} (one commit), e.g. to switch between eval fixtures. */
+    public void replaceMain(java.util.Map<String, String> files, String message) {
+        Path work = root.resolve("work-" + System.nanoTime());
+        git(root, "clone", "-q", "-b", "main", origin.toString(), work.toString());
+        git(work, "rm", "-rq", "--ignore-unmatch", ".");
+        try {
+            for (var f : files.entrySet()) {
+                Path file = work.resolve(f.getKey());
+                Files.createDirectories(file.getParent());
+                Files.writeString(file, f.getValue());
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+        git(work, "add", "-A");
+        git(work, "-c", "user.name=seed", "-c", "user.email=seed@x", "commit", "-q", "--allow-empty", "-m", message);
         git(work, "push", "-q", "origin", "main");
     }
 

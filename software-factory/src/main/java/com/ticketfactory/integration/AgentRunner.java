@@ -3,8 +3,8 @@ package com.ticketfactory.integration;
 import java.math.BigDecimal;
 
 /**
- * Runs the coding agent inside a sandbox. Phase 1: {@code FakeAgentRunner}.
- * TODO(phase-2): run Claude Code headless in the sandbox, passing maxTurns, and parse its usage report.
+ * Runs the coding agent inside a sandbox: {@code FakeAgentRunner} in fake mode, {@code ClaudeCodeAgentRunner} in real
+ * mode. An implementation must stop promptly when its thread is interrupted (cancel, timeout, lease loss).
  */
 public interface AgentRunner {
 

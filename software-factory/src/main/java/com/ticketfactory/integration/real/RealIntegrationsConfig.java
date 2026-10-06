@@ -7,12 +7,16 @@ import com.github.dockerjava.core.DockerClientImpl;
 import com.github.dockerjava.transport.DockerHttpClient;
 import com.github.dockerjava.zerodep.ZerodepDockerHttpClient;
 import com.ticketfactory.FactoryProperties;
+import com.ticketfactory.integration.AgentRunner;
 import com.ticketfactory.integration.ChecksRunner;
+import com.ticketfactory.integration.agent.AgentProperties;
+import com.ticketfactory.integration.agent.ClaudeCodeAgentRunner;
 import com.ticketfactory.integration.GitHubClient;
 import com.ticketfactory.integration.checks.ChecksProperties;
 import com.ticketfactory.integration.checks.SandboxChecksRunner;
 import com.ticketfactory.integration.docker.DockerSandboxRunner;
 import com.ticketfactory.integration.docker.HostGit;
+import com.ticketfactory.integration.docker.ModelApiProxy;
 import com.ticketfactory.integration.docker.SandboxProperties;
 import com.ticketfactory.integration.github.GitHubAppAuth;
 import com.ticketfactory.integration.github.GitHubAuth;
@@ -25,37 +29,36 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.List;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationContextException;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 /**
  * Wiring for {@code factory.integrations=real}.
  *
- * <p>Done: {@link GitHubRestClient} (M2), {@link DockerSandboxRunner} (M3), {@link SandboxChecksRunner} (M4).
- * Still missing: AgentRunner (M5).
- * Until all four exist, startup fails with a clear message (see {@link #notCompleteYet()}).
+ * <p>{@link GitHubRestClient} (M2), {@link DockerSandboxRunner} (M3), {@link SandboxChecksRunner} (M4) and
+ * {@link ClaudeCodeAgentRunner} with its {@link ModelApiProxy} (M5). Startup fails with a clear message when the model
+ * API credential is missing (see {@link #modelCredentialRequired()}).
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = "factory.integrations", havingValue = "real")
 public class RealIntegrationsConfig {
 
-    /** Integrations without a real implementation yet. Remove the entry when M5 lands. */
-    static final List<String> MISSING = List.of("AgentRunner (M5)");
-
     /**
-     * Fails startup with a clear message. A bean-factory post-processor runs before any regular bean is created, so
-     * this fires before something like GitHubPoller can fail with an obscure "no bean of type ...".
+     * Fails startup with a clear message when there is no model API credential. A bean-factory post-processor runs
+     * before any regular bean is created, so this fires before anything fails with an obscure error.
      */
     @Bean
-    static BeanFactoryPostProcessor notCompleteYet() {
+    static BeanFactoryPostProcessor modelCredentialRequired() {
         return beanFactory -> {
-            if (!MISSING.isEmpty()) {
-                throw new ApplicationContextException("factory.integrations=real is not implemented yet: missing "
-                        + String.join(", ", MISSING) + " (see docs/PHASE2-PLAN.md). Use factory.integrations=fake.");
+            Environment env = beanFactory.getBean(Environment.class);
+            if (env.getProperty("factory.agent.api-key", "").isBlank()
+                    && env.getProperty("factory.agent.oauth-token", "").isBlank()) {
+                throw new ApplicationContextException("factory.integrations=real needs a model API credential: set"
+                        + " ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`).");
             }
         };
     }
@@ -88,9 +91,24 @@ public class RealIntegrationsConfig {
     }
 
     @Bean
+    ModelApiProxy modelApiProxy(DockerClient docker, AgentProperties agent) {
+        // An API key is preferred when both are set: it is the credential meant for automation.
+        return agent.apiKey().isBlank()
+                ? new ModelApiProxy(docker, agent.proxyImage(), agent.egressNetwork(), agent.upstreamUrl(),
+                        ModelApiProxy.Mode.OAUTH_TOKEN, agent.oauthToken().strip())
+                : new ModelApiProxy(docker, agent.proxyImage(), agent.egressNetwork(), agent.upstreamUrl(),
+                        ModelApiProxy.Mode.API_KEY, agent.apiKey().strip());
+    }
+
+    @Bean
     DockerSandboxRunner sandboxRunner(DockerClient docker, SandboxProperties sandbox, HostGit git,
-                                      FactoryProperties factory) {
-        return new DockerSandboxRunner(docker, git, sandbox, factory.baseBranch());
+                                      FactoryProperties factory, ModelApiProxy proxy) {
+        return new DockerSandboxRunner(docker, git, sandbox, factory.baseBranch(), proxy);
+    }
+
+    @Bean
+    AgentRunner agentRunner(DockerSandboxRunner sandbox, AgentProperties agent, FactoryProperties factory) {
+        return new ClaudeCodeAgentRunner(sandbox, agent, factory.baseBranch());
     }
 
     @Bean

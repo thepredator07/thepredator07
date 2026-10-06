@@ -22,6 +22,8 @@ jobs:
           java-version: '21'
           cache: maven
           cache-dependency-path: software-factory/pom.xml
+      - name: Build the sandbox image (real Claude Code CLI; the agent tests use it with a scripted model)
+        run: docker build -t factory-sandbox:latest sandbox
       - name: Build and test (Testcontainers uses the runner's Docker)
         run: mvn -B clean verify
       - name: Upload test reports

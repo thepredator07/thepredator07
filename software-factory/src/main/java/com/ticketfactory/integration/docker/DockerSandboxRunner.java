@@ -30,7 +30,9 @@ import org.slf4j.LoggerFactory;
  *
  * <ul>
  *   <li><b>No network</b> ({@code --network none}) and <b>no credentials</b>: code goes in and out as git bundles,
- *       streamed through {@code docker exec}; the host does all fetching and pushing ({@link HostGit}).</li>
+ *       streamed through {@code docker exec}; the host does all fetching and pushing ({@link HostGit}). With a
+ *       {@link ModelApiProxy}, the sandbox is on its own internal network instead, where the only thing it can reach
+ *       is that proxy, and only while the agent runs.</li>
  *   <li>Non-root user 1000, read-only root filesystem, all capabilities dropped, {@code no-new-privileges}, limits on
  *       memory, CPU and processes; an init process reaps orphans.</li>
  *   <li>{@code /workspace} and {@code /tmp} are size-limited tmpfs owned by the sandbox user. A sandbox that stopped
@@ -50,6 +52,7 @@ public class DockerSandboxRunner implements SandboxRunner {
     private final HostGit git;
     private final SandboxProperties props;
     private final String baseBranch;
+    private final ModelApiProxy proxy; // null: no network at all
 
     public record ExecResult(int exitCode, String output) {
         public boolean ok() {
@@ -57,11 +60,31 @@ public class DockerSandboxRunner implements SandboxRunner {
         }
     }
 
+    /** A sandbox with no network at all (checks only, no agent). */
     public DockerSandboxRunner(DockerClient docker, HostGit git, SandboxProperties props, String baseBranch) {
+        this(docker, git, props, baseBranch, null);
+    }
+
+    /** With a proxy, each sandbox can reach the model API through it, and nothing else. */
+    public DockerSandboxRunner(DockerClient docker, HostGit git, SandboxProperties props, String baseBranch,
+                               ModelApiProxy proxy) {
         this.docker = docker;
         this.git = git;
         this.props = props;
         this.baseBranch = baseBranch;
+        this.proxy = proxy;
+    }
+
+    public ModelApiProxy proxy() {
+        return proxy;
+    }
+
+    /** The ticket id in a sandbox name ({@code factory-<id>}). */
+    public static long ticketIdOf(String sandboxId) {
+        if (!sandboxId.matches("factory-\\d+")) {
+            throw new IllegalArgumentException("not a sandbox name: " + sandboxId);
+        }
+        return Long.parseLong(sandboxId.substring("factory-".length()));
     }
 
     public static String containerName(long ticketId) {
@@ -71,6 +94,9 @@ public class DockerSandboxRunner implements SandboxRunner {
     @Override
     public Sandbox prepare(TicketContext ticket) {
         String name = containerName(ticket.ticketId());
+        if (proxy != null) {
+            proxy.ensure(ticket.ticketId()); // the sandbox's network must exist before the sandbox
+        }
         InspectContainerResponse existing = inspect(name);
         if (existing != null && Boolean.TRUE.equals(existing.getState().getRunning()) && repoReady(name)) {
             return sandbox(ticket.ticketId(), name);
@@ -128,19 +154,41 @@ public class DockerSandboxRunner implements SandboxRunner {
         } catch (NotFoundException e) {
             // already gone
         }
+        if (proxy != null) {
+            proxy.remove(ticketIdOf(sandboxId));
+        }
     }
 
     @Override
     public List<Sandbox> list() {
         List<Container> containers = docker.listContainersCmd().withShowAll(true)
                 .withLabelFilter(Map.of(LABEL_MANAGED, "true")).exec();
-        return containers.stream()
-                .map(c -> new Sandbox(c.getNames()[0].replaceFirst("^/", ""),
-                        Long.parseLong(c.getLabels().get(LABEL_TICKET)), REPO_DIR))
-                .toList();
+        // One entry per ticket that still has anything: its sandbox, or a proxy or network left behind by a crash.
+        // Destroying the entry removes all of them.
+        java.util.Set<Long> ids = new java.util.TreeSet<>();
+        containers.forEach(c -> ids.add(Long.parseLong(c.getLabels().get(LABEL_TICKET))));
+        if (proxy != null) {
+            ids.addAll(proxy.ticketIds());
+        }
+        return ids.stream().map(id -> new Sandbox(containerName(id), id, REPO_DIR)).toList();
     }
 
     /** Runs a command inside the sandbox as the sandbox user. Used by checks (M4) and the agent (M5). */
+    /** Writes {@code content} to {@code path} inside the sandbox, as the sandbox user. */
+    public void writeFile(String sandboxId, String path, String content) {
+        try {
+            Path tmp = Files.createTempFile("factory-in-", ".txt");
+            try {
+                Files.writeString(tmp, content);
+                copyIn(sandboxId, tmp, path);
+            } finally {
+                deleteQuietly(tmp);
+            }
+        } catch (IOException e) {
+            throw new StepFailedException("could not write " + path + " into sandbox: " + e, e);
+        }
+    }
+
     public ExecResult exec(String sandboxId, Duration timeout, String... cmd) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         int code = run(sandboxId, timeout, null, out, out, null, List.of(), cmd);
@@ -227,12 +275,16 @@ public class DockerSandboxRunner implements SandboxRunner {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new StepFailedException("interrupted while pulling " + props.image(), e);
+        } catch (RuntimeException e) {
+            throw new StepFailedException("sandbox image " + props.image() + " is not on this host and could not be"
+                    + " pulled (" + e.getMessage() + "). Build it: docker build -t factory-sandbox:latest"
+                    + " software-factory/sandbox", e);
         }
     }
 
     private void createContainer(String name, TicketContext ticket) {
         HostConfig host = HostConfig.newHostConfig()
-                .withNetworkMode("none")
+                .withNetworkMode(proxy == null ? "none" : ModelApiProxy.networkName(ticket.ticketId()))
                 .withReadonlyRootfs(true)
                 .withCapDrop(Capability.ALL)
                 .withSecurityOpts(List.of("no-new-privileges:true"))
@@ -267,6 +319,9 @@ public class DockerSandboxRunner implements SandboxRunner {
     }
 
     private void copyIn(String container, Path file, String target) {
+        if (!target.matches("/[A-Za-z0-9._/-]+")) {
+            throw new IllegalArgumentException("unsafe path: " + target);
+        }
         ByteArrayOutputStream err = new ByteArrayOutputStream();
         try (InputStream in = Files.newInputStream(file)) {
             // head -c stops after exactly N bytes. `cat` would wait for end-of-input, which docker-java's stdin never

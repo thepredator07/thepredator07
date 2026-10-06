@@ -20,7 +20,7 @@ public record FactoryProperties(
     public enum Integrations {
         /** In-memory fakes (Phase 1). Also enables the fake-only dashboard actions and /api/fake. */
         FAKE,
-        /** Real GitHub, Docker sandbox, Claude Code and checks. Not implemented yet (Phase 2, M2-M5). */
+        /** Real GitHub, Docker sandbox, Claude Code and checks (Phase 2). */
         REAL
     }
 
