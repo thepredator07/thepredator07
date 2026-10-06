@@ -28,8 +28,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * {@code demo} profile: on first start (empty database) writes 18 finished tickets with realistic history so the
- * dashboard has data, and opens 4 issues on the fake GitHub that then flow through the real pipeline live.
+ * {@code demo} profile: on first start (empty database) writes 19 finished attempts with realistic history so the
+ * dashboard has data (19 attempts at 18 issues), and opens 4 issues on the fake GitHub that then flow through the real pipeline live.
  * Every seeded history is checked against {@link TicketStateMachine}, so demo data can never show an illegal path.
  */
 @Component
@@ -54,7 +54,11 @@ public class DemoSeeder implements ApplicationRunner {
     }
 
     /** One historical ticket: the path it took, how many agent runs, and why it ended. */
-    record Scenario(String title, String body, List<TicketState> path, int agentRuns, String endReason) {
+    record Scenario(String title, String body, List<TicketState> path, int agentRuns, String endReason, int issue,
+                    int attempt) {
+        Scenario(String title, String body, List<TicketState> path, int agentRuns, String endReason) {
+            this(title, body, path, agentRuns, endReason, 0, 1);
+        }
     }
 
     private static final List<TicketState> HAPPY =
@@ -91,7 +95,11 @@ public class DemoSeeder implements ApplicationRunner {
                         List.of(RECEIVED, SANDBOX_READY, CODING, CHECKS, PR_OPENED, AWAITING_APPROVAL, CANCELLED), 1,
                         "PR #1007 closed without merging"),
                 new Scenario("Rename customer_ref column", "",
-                        List.of(RECEIVED, SANDBOX_READY, CANCELLED), 0, "Cancelled from the dashboard"));
+                        List.of(RECEIVED, SANDBOX_READY, CANCELLED), 0, "Cancelled from the dashboard"),
+                // Attempt 2 of issue #14 ("Fix flaky OrderSyncIntegrationTest", which failed): label re-applied after
+                // someone added the stack trace to the issue.
+                new Scenario("Fix flaky OrderSyncIntegrationTest", "Stack trace added: the test races the clock.",
+                        ONE_FIX, 2, "PR approved", 14, 2));
     }
 
     /** Issues opened on the fake GitHub at startup; these go through the real pipeline while you watch. */
@@ -131,7 +139,7 @@ public class DemoSeeder implements ApplicationRunner {
             Scenario s = all.get(i);
             validate(s.path());
             Instant created = now.minus(Duration.ofHours(6L * (all.size() - i))).minusSeconds(rnd.nextInt(3600));
-            insert(i + 1, s, created, rnd);
+            insert(s.issue() > 0 ? s.issue() : i + 1, s, created, rnd);
         }
         log.info("Demo: seeded {} historical tickets", all.size());
     }
@@ -187,16 +195,18 @@ public class DemoSeeder implements ApplicationRunner {
         Instant finished = times.getLast();
         TicketState end = s.path().getLast();
         boolean reachedPr = s.path().contains(PR_OPENED);
-        int prNumber = 1000 + issueNumber;
+        int prNumber = 1000 + issueNumber + 100 * (s.attempt() - 1);
 
         long id = jdbc.sql("""
-                        INSERT INTO tickets (repo, issue_number, title, body, state, branch_name, sandbox_id, pr_number,
-                            pr_url, failure_reason, tokens_input, tokens_output, cost_usd, turns, retries, created_at,
-                            updated_at, started_at, finished_at, duration_ms)
-                        VALUES (:repo, :issue, :title, :body, :state, :branch, :sbx, :pr, :prUrl, :reason, :in, :out,
-                            :cost, :turns, :retries, :created, :finished, :created, :finished, :duration)
+                        INSERT INTO tickets (repo, issue_number, attempt, title, body, state, branch_name, sandbox_id,
+                            pr_number, pr_url, failure_reason, tokens_input, tokens_output, cost_usd, turns, retries,
+                            triggered_at, created_at, updated_at, started_at, finished_at, duration_ms)
+                        VALUES (:repo, :issue, :attempt, :title, :body, :state, :branch, :sbx, :pr, :prUrl, :reason,
+                            :in, :out, :cost, :turns, :retries, :created, :created, :finished, :created, :finished,
+                            :duration)
                         RETURNING id""")
-                .param("repo", props.repo()).param("issue", issueNumber).param("title", s.title())
+                .param("repo", props.repo()).param("issue", issueNumber).param("attempt", s.attempt())
+                .param("title", s.title())
                 .param("body", s.body()).param("state", end.name())
                 .param("branch", null).param("sbx", null)
                 .param("pr", reachedPr ? prNumber : null)

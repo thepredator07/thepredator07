@@ -19,7 +19,9 @@ public class FakeAgentRunner extends AbstractFake implements AgentRunner {
         FakeScript script = FakeScript.parse(request.ticket().body());
         sleep(script.duration("agent-delay").orElse(config.delay()));
 
-        int turns = script.integer("agent-turns").orElse(config.turnsPerRun());
+        // A well-behaved agent stays within the turns it was given. A scripted value deliberately ignores the limit,
+        // to simulate an agent that overshoots (that is what the pipeline's turn guardrail is for).
+        int turns = script.integer("agent-turns").orElse(Math.min(config.turnsPerRun(), request.maxTurns()));
         BigDecimal cost = script.decimal("agent-cost").orElse(config.costPerRunUsd());
         long in = turns * config.inputTokensPerTurn();
         long out = turns * config.outputTokensPerTurn();

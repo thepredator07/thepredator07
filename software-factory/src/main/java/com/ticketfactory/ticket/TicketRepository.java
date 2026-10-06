@@ -29,21 +29,48 @@ public class TicketRepository {
         this.jdbc = jdbc;
     }
 
-    /** Inserts a ticket in RECEIVED, or returns empty if the issue already has a ticket. */
-    public Optional<Long> insertIfAbsent(String repo, int issueNumber, String title, String body, Instant now) {
+    /**
+     * Inserts a new attempt (state RECEIVED) for an issue and returns its id. Returns empty, inserting nothing, when
+     * the issue already has an unfinished attempt, or when the trigger was already used by an earlier attempt
+     * ({@code triggeredAt} is not newer than the latest attempt's). Re-applying the label is what starts a new attempt.
+     */
+    public Optional<Long> insertAttempt(String repo, int issueNumber, String title, String body, Instant triggeredAt,
+                                        Instant now) {
+        // An aggregate without GROUP BY yields exactly one row even when the issue has no attempts yet;
+        // HAVING then decides whether that row is inserted. ON CONFLICT covers a concurrent insert of the same attempt.
         return jdbc.sql("""
-                        INSERT INTO tickets (repo, issue_number, title, body, state, created_at, updated_at)
-                        SELECT :repo, :issue, :title, :body, 'RECEIVED', :now, :now
-                        WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE repo = :repo AND issue_number = :issue)
-                        ON CONFLICT (repo, issue_number) DO NOTHING
+                        INSERT INTO tickets (repo, issue_number, attempt, title, body, state, triggered_at,
+                                             created_at, updated_at)
+                        SELECT :repo, :issue, COALESCE(MAX(t.attempt), 0) + 1, :title, :body, 'RECEIVED',
+                               :triggeredAt, :now, :now
+                        FROM tickets t
+                        WHERE t.repo = :repo AND t.issue_number = :issue
+                        HAVING COUNT(*) FILTER (WHERE t.state NOT IN ('DONE','FAILED','CANCELLED')) = 0
+                           AND (MAX(t.triggered_at) IS NULL OR MAX(t.triggered_at) < :triggeredAt)
+                        ON CONFLICT DO NOTHING
                         RETURNING id""")
                 .param("repo", repo)
                 .param("issue", issueNumber)
                 .param("title", title)
                 .param("body", body == null ? "" : body)
+                .param("triggeredAt", Timestamp.from(triggeredAt))
                 .param("now", Timestamp.from(now))
                 .query(Long.class)
                 .optional();
+    }
+
+    /** All attempts at one issue, newest first. */
+    public List<Ticket> attemptsFor(String repo, int issueNumber) {
+        return jdbc.sql("SELECT * FROM tickets WHERE repo = :repo AND issue_number = :issue ORDER BY attempt DESC")
+                .param("repo", repo).param("issue", issueNumber).query(TICKET).list();
+    }
+
+    /** Unfinished attempts in a repo (for reconciling against the issue tracker). */
+    public List<Ticket> findActive(String repo) {
+        return jdbc.sql("""
+                        SELECT * FROM tickets WHERE repo = :repo AND state NOT IN ('DONE','FAILED','CANCELLED')
+                        ORDER BY id""")
+                .param("repo", repo).query(TICKET).list();
     }
 
     public Optional<Ticket> findById(long id) {
@@ -143,6 +170,7 @@ public class TicketRepository {
                 rs.getLong("id"),
                 rs.getString("repo"),
                 rs.getInt("issue_number"),
+                rs.getInt("attempt"),
                 rs.getString("title"),
                 rs.getString("body"),
                 TicketState.valueOf(rs.getString("state")),
@@ -157,6 +185,7 @@ public class TicketRepository {
                 rs.getBigDecimal("cost_usd"),
                 rs.getInt("turns"),
                 rs.getInt("retries"),
+                instant(rs, "triggered_at"),
                 instant(rs, "created_at"),
                 instant(rs, "updated_at"),
                 instant(rs, "started_at"),

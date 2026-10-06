@@ -18,14 +18,26 @@ public class TicketService {
         this.clock = clock;
     }
 
-    /** Creates a ticket for an issue (state RECEIVED) unless one exists. Returns the new ticket id. */
+    /**
+     * Starts a new attempt at an issue (state RECEIVED), unless one is still running or this trigger was already
+     * used. Returns the new ticket id.
+     */
+    @Transactional
+    public Optional<Long> receive(String repo, int issueNumber, String title, String body, Instant triggeredAt) {
+        Instant now = clock.instant();
+        Optional<Long> id = tickets.insertAttempt(repo, issueNumber, title, body, triggeredAt, now);
+        id.ifPresent(ticketId -> {
+            int attempt = tickets.get(ticketId).attempt();
+            tickets.insertTransition(ticketId, null, TicketState.RECEIVED,
+                    "Picked up issue #" + issueNumber + (attempt > 1 ? " (attempt " + attempt + ")" : ""), now);
+        });
+        return id;
+    }
+
+    /** Convenience for callers without a trigger time (tests, demo): the trigger is "now". */
     @Transactional
     public Optional<Long> receive(String repo, int issueNumber, String title, String body) {
-        Instant now = clock.instant();
-        Optional<Long> id = tickets.insertIfAbsent(repo, issueNumber, title, body, now);
-        id.ifPresent(ticketId -> tickets.insertTransition(ticketId, null, TicketState.RECEIVED,
-                "Picked up issue #" + issueNumber, now));
-        return id;
+        return receive(repo, issueNumber, title, body, clock.instant());
     }
 
     /**

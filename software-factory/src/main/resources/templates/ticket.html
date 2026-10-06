@@ -24,6 +24,7 @@
     <div class="card">
       <dl class="kv">
         <dt>Issue</dt><dd th:text="${t.repo + '#' + t.issueNumber}">repo#1</dd>
+        <dt>Attempt</dt><dd th:text="${t.attempt} + ' of ' + ${attempts.size()}">1 of 1</dd>
         <dt>Branch</dt><dd><code th:text="${t.branchName ?: '—'}">factory/1</code></dd>
         <dt>Pull request</dt>
         <dd><a th:if="${t.prUrl}" th:href="${t.prUrl}" th:text="'#' + ${t.prNumber}">#1</a>
@@ -73,6 +74,26 @@
 
   <h2>Issue body</h2>
   <pre th:text="${t.body.isEmpty()} ? '(empty)' : ${t.body}">body</pre>
+
+  <th:block th:if="${attempts.size() > 1}">
+    <h2>All attempts at this issue</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>Attempt</th><th>Ticket</th><th>State</th><th class="num">Cost</th><th>Triggered</th><th>Reason</th></tr></thead>
+        <tbody>
+        <tr th:each="a : ${attempts}">
+          <td th:text="${a.attempt}">1</td>
+          <td><a th:href="@{/tickets/{id}(id=${a.id})}" th:text="'#' + ${a.id}">#1</a>
+            <span class="muted" th:if="${a.id == t.id}">(this one)</span></td>
+          <td><span class="badge" th:classappend="${a.state}" th:text="${a.state}">S</span></td>
+          <td class="num" th:text="${@fmt.usd(a.costUsd)}">$0</td>
+          <td class="muted" th:text="${@fmt.ts(a.triggeredAt)}">ts</td>
+          <td class="reason" th:text="${a.failureReason ?: '—'}">—</td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+  </th:block>
 
   <h2>Jobs</h2>
   <div class="card">

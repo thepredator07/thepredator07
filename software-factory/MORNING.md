@@ -19,9 +19,9 @@ Wait for `Started FactoryApplication` in the logs, then give the live demo ticke
 ## 2. Look at the pages (about 3 minutes)
 
 **<http://localhost:8080/tickets>** (`/` redirects here)
-- Four tiles: **Tickets 22**, **Success rate 73.7%** (14 done, 5 failed), **Avg duration** (about 28m; seeded history
-  is backdated), **Total cost** (about $11.11).
-- A row of state filters, then a table: 14 DONE, 5 FAILED, 2 CANCELLED, 1 AWAITING_APPROVAL. Click **FAILED** to
+- Four tiles: **Tickets 23**, **Success rate 75.0%** (15 done, 5 failed), **Avg duration** (about 28m; seeded history
+  is backdated), **Total cost** (about $11.56).
+- A row of state filters, then a table: 15 DONE, 5 FAILED, 2 CANCELLED, 1 AWAITING_APPROVAL. Click **FAILED** to
   filter the table.
 - The four newest rows (issues #900–903) are the live tickets that just went through the pipeline.
   These numbers come from my run; the seeded history uses a fixed random seed, so yours should match.
@@ -44,6 +44,10 @@ Wait for `Started FactoryApplication` in the logs, then give the live demo ticke
 - Tickets by state with share bars, cost by outcome (DONE vs FAILED), the configured guardrails ($2.00, 40 turns,
   30m, 3 retries), and recent failures with reasons.
 
+**Click "Fix flaky OrderSyncIntegrationTest" (attempt 2)** (since M1)
+- The issue failed on attempt 1 and was fixed on attempt 2. The page shows "Attempt 2 of 2" and an
+  "All attempts at this issue" table linking both.
+
 ## 3. Send your own issue through (about 1 minute)
 
 ```bash
@@ -55,18 +59,28 @@ Refresh `/tickets` within about 5 seconds: a new ticket, already DONE, with a PR
 `"body": "fake-agent: fail"` to watch one fail after 3 retries, or `"fake-approval: pending"` to get one waiting on
 the Approve button. All the directives are listed in README.md.
 
+Since M1 you can also re-trigger and close issues on the fake GitHub:
+
+```bash
+curl -X POST localhost:8080/api/fake/issues/903/relabel   # failed issue: the next poll starts attempt 2
+curl -X POST localhost:8080/api/fake/issues/501/close     # a running attempt without a PR yet is cancelled
+```
+
 ## 4. Run the tests yourself
 
 ```bash
 cd software-factory && mvn clean verify      # needs Docker running (Testcontainers)
 ```
 
-Expect `Tests run: 176, Failures: 0, Errors: 0, Skipped: 0` and `BUILD SUCCESS` (about 40 seconds after
+Expect `Tests run: 211, Failures: 0, Errors: 0, Skipped: 0` and `BUILD SUCCESS` (about 45 seconds after
 dependencies are downloaded).
 
 ---
 
-## Results from the overnight run
+## Results from the overnight run (Phase 1)
+
+> This section records the original Phase 1 run (164 tests, 22 demo tickets). Later milestones are verified in their
+> PRs and in `docs/PHASE2-PLAN.md`.
 
 All commands below were actually run in the build sandbox (Java 21.0.11, Maven 3.9.11, Docker 29.6.2,
 PostgreSQL 16 via Testcontainers).

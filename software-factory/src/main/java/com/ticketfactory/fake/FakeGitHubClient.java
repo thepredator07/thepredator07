@@ -4,6 +4,7 @@ import com.ticketfactory.integration.BranchPolicy;
 import com.ticketfactory.integration.GitHubClient;
 import com.ticketfactory.integration.StepFailedException;
 import com.ticketfactory.integration.TicketContext;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -21,6 +22,9 @@ public class FakeGitHubClient extends AbstractFake implements GitHubClient {
     private final Map<Integer, OpenedPr> prs = new ConcurrentHashMap<>();
     private final List<String> comments = new CopyOnWriteArrayList<>();
     private final AtomicInteger prNumbers = new AtomicInteger(1000);
+    private volatile boolean listingFails;
+    private final java.util.concurrent.atomic.AtomicReference<Instant> lastTrigger =
+            new java.util.concurrent.atomic.AtomicReference<>();
 
     public FakeGitHubClient(FakeProperties.GitHub config) {
         super("github", config.behavior());
@@ -35,8 +39,46 @@ public class FakeGitHubClient extends AbstractFake implements GitHubClient {
 
     // ---- test / demo controls ----
 
+    /** Opens an issue (or replaces it). The trigger time is now. */
     public void addIssue(String repo, int number, String title, String body, String... labels) {
-        issues.put(repo + "#" + number, new Issue(repo, number, title, body, Set.of(labels)));
+        issues.put(key(repo, number), new Issue(repo, number, title, body, Set.of(labels), now()));
+    }
+
+    /** Removes and re-applies {@code label}: a new trigger, so a finished issue gets a new attempt. */
+    public void relabel(String repo, int number, String label) {
+        issues.computeIfPresent(key(repo, number), (k, i) -> {
+            Set<String> labels = new java.util.HashSet<>(i.labels());
+            labels.add(label);
+            return new Issue(i.repo(), i.number(), i.title(), i.body(), Set.copyOf(labels), now());
+        });
+    }
+
+    public void removeLabel(String repo, int number, String label) {
+        issues.computeIfPresent(key(repo, number), (k, i) -> {
+            Set<String> labels = new java.util.HashSet<>(i.labels());
+            labels.remove(label);
+            return new Issue(i.repo(), i.number(), i.title(), i.body(), Set.copyOf(labels), i.triggeredAt());
+        });
+    }
+
+    public void editIssue(String repo, int number, String title, String body) {
+        issues.computeIfPresent(key(repo, number),
+                (k, i) -> new Issue(i.repo(), i.number(), title, body, i.labels(), i.triggeredAt()));
+    }
+
+    public void closeIssue(String repo, int number) {
+        issues.remove(key(repo, number));
+    }
+
+    private static String key(String repo, int number) {
+        return repo + "#" + number;
+    }
+
+    /** Microsecond precision, like GitHub timestamps stored in Postgres; strictly increasing per fake. */
+    private Instant now() {
+        Instant candidate = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        return lastTrigger.updateAndGet(prev ->
+                prev == null || candidate.isAfter(prev) ? candidate : prev.plus(1, java.time.temporal.ChronoUnit.MICROS));
     }
 
     public void setPullRequestStatus(int prNumber, PrStatus status) {
@@ -54,6 +96,7 @@ public class FakeGitHubClient extends AbstractFake implements GitHubClient {
     @Override
     public void reset() {
         super.reset();
+        listingFails = false;
         issues.clear();
         prs.clear();
         comments.clear();
@@ -61,8 +104,16 @@ public class FakeGitHubClient extends AbstractFake implements GitHubClient {
 
     // ---- GitHubClient ----
 
+    /** Makes {@link #listOpenIssues} throw, like a GitHub outage (tests). */
+    public void setListingFails(boolean fails) {
+        listingFails = fails;
+    }
+
     @Override
     public List<Issue> listOpenIssues(String repo, String label) {
+        if (listingFails) {
+            throw new StepFailedException("fake github: 503 listing issues (simulated)");
+        }
         List<Issue> result = new ArrayList<>();
         for (Issue i : issues.values()) {
             if (i.repo().equals(repo) && i.labels().contains(label)) {
@@ -76,8 +127,14 @@ public class FakeGitHubClient extends AbstractFake implements GitHubClient {
     @Override
     public PullRequest openPullRequest(PullRequestRequest req) {
         BranchPolicy.validatePullRequest(req.head(), req.base());
+        for (OpenedPr existing : prs.values()) {
+            if (existing.pr().head().equals(req.head()) && existing.repo().equals(req.repo())
+                    && existing.status() != PrStatus.CLOSED) {
+                return existing.pr();
+            }
+        }
         long ticketId = Long.parseLong(req.head().substring(BranchPolicy.PREFIX.length()));
-        Issue issue = issues.get(req.repo() + "#" + req.issueNumber());
+        Issue issue = issues.get(key(req.repo(), req.issueNumber()));
         String issueBody = issue == null ? "" : issue.body();
         if (nextCallFails(new TicketContext(ticketId, req.repo(), req.issueNumber(), req.title(), issueBody, req.head()))) {
             throw new StepFailedException("fake github: 502 Bad Gateway opening PR (simulated)");

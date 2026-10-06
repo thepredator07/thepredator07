@@ -130,6 +130,38 @@ covered by a test (`TicketPipelineTest`, `HardTimeoutTest`).
 - `real`: `RealIntegrationsConfig` is active and no fake bean or endpoint is registered. Until M2–M5 land, startup
   fails with "factory.integrations=real is not implemented yet". Real implementations get registered there.
 
+## Tickets are attempts (M1)
+
+A ticket is one **attempt** at an issue (`tickets.attempt`, numbered from 1). Each attempt snapshots the issue's
+title and body at trigger time, gets its own branch `factory/<ticket-id>`, sandbox, PR and usage, and goes through
+the state machine once.
+
+- **New attempt rule** (`TicketRepository.insertAttempt`, one SQL statement): insert only if the issue has no
+  unfinished attempt *and* the trigger is newer than the latest attempt's `triggered_at`. The trigger time is when
+  the label was last applied (`GitHubClient.Issue.triggeredAt`), so removing and re-applying the label starts the
+  next attempt, while a finished issue that just keeps its label is never retried in a loop.
+- `uq_tickets_one_active_per_issue` (partial unique index) guarantees one unfinished attempt per issue even with
+  concurrent pollers; `UNIQUE (repo, issue_number, attempt)` keeps numbering unique.
+- The dashboard shows "Attempt n of m" and links every attempt at the issue.
+
+## Reconciliation (M1)
+
+Every poll compares running attempts with the issue tracker. An attempt whose issue was closed or lost the label is
+cancelled **only while it has no PR yet** (RECEIVED, SANDBOX_READY, CODING, CHECKS). Once a PR exists, the PR
+decides: merging a PR with "Closes #N" closes the issue, and that must not cancel a ticket that is about to be DONE.
+`listOpenIssues` must be complete (implementations page internally) and throw rather than return a partial list;
+a failed listing cancels nothing.
+
+## Contract tests (M1)
+
+`src/test/java/com/ticketfactory/contract/` holds one abstract suite per interface: `GitHubClientContract`,
+`SandboxRunnerContract`, `AgentRunnerContract`, `ChecksRunnerContract`. Each fake has a subclass that runs on every
+build; each real implementation gets one in its milestone. The contracts pin down the behavior the pipeline relies
+on: idempotent `prepare` and `openPullRequest` (so a crash between a side effect and the DB write never duplicates
+work), `BranchPolicy` enforcement, complete issue listings with trigger times, staying within `maxTurns`, usage
+reported even on failure, prompt stop on interrupt, and bounded checks output. Cost is deliberately not promised:
+only the pipeline's guardrail can enforce it.
+
 ## Fakes
 
 Each fake takes its behavior from three places, in priority order:

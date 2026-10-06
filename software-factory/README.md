@@ -19,7 +19,7 @@ cp .env.example .env          # optionally change POSTGRES_PASSWORD
 docker compose up --build
 ```
 
-Open <http://localhost:8080>. `.env.example` turns on the `demo` profile, so you see 18 finished tickets right away,
+Open <http://localhost:8080>. `.env.example` turns on the `demo` profile, so you see 19 finished tickets right away (including an issue that failed and was fixed on its second attempt),
 plus 4 live tickets that run through the pipeline in the first ~20 seconds. [MORNING.md](MORNING.md) has a 5-minute
 tour.
 
@@ -38,7 +38,7 @@ mvn clean verify
 ```
 
 The tests need Docker: Testcontainers starts a real PostgreSQL 16, because the job queue depends on Postgres-only
-features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 176 tests in about 40 seconds. CI
+features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 211 tests in about 45 seconds. CI
 (`.github/workflows/factory-ci.yml`) runs the same command on every push and pull request.
 
 ## What is built vs. not built
@@ -48,7 +48,8 @@ features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 176 test
 | State machine: 9 states, fixed transition table, invalid moves rejected, every transition stored with a timestamp | Built |
 | Postgres job queue (`FOR UPDATE SKIP LOCKED`), one live job per ticket, heartbeat leases, fenced job updates, virtual-thread workers | Built |
 | Interfaces `GitHubClient`, `SandboxRunner`, `AgentRunner`, `ChecksRunner` with configurable fakes | Built |
-| GitHub poller (labeled issues become tickets, once per issue) | Built (against the fake) |
+| GitHub poller: labeled issues become tickets; re-applying the label to a finished issue starts a new attempt; closing or unlabeling cancels a run that has no PR yet | Built (against the fake) |
+| Contract tests: one shared suite per interface that fakes and real implementations must both pass | Built (fakes pass all 24) |
 | Pipeline: retries with backoff, checks-failed loop back to coding, approval wait, cancellation | Built |
 | Guardrails: max cost per ticket, max turns, hard timeout, max retries (all configurable) | Built |
 | Per-ticket tokens, cost, turns, duration, retries, outcome, failure reason | Built |
@@ -101,6 +102,9 @@ curl -X POST localhost:8080/api/fake/issues -H 'Content-Type: application/json' 
 | `fake-checks: fail` / `fail-then-succeed N` | Checks fail, so the ticket goes back to CODING with the output as feedback |
 | `fake-github: fail-then-succeed N` | Opening the PR fails N times |
 | `fake-approval: pending` / `closed` | PR waits for the Approve button / is closed, which cancels the ticket |
+
+Other fake GitHub controls: `POST /api/fake/issues/{n}/relabel` (re-apply the label: a finished issue gets a new
+attempt on the next poll) and `POST /api/fake/issues/{n}/close` (a running attempt without a PR is cancelled).
 
 ## Docs
 

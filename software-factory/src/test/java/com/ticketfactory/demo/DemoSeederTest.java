@@ -44,10 +44,16 @@ class DemoSeederTest extends AbstractIntegrationTest {
             assertThat(t.durationMs()).isNotNull();
         }
         Stats s = stats.compute();
-        assertThat(s.done()).isEqualTo(12);
+        assertThat(s.done()).isEqualTo(13);
         assertThat(s.failed()).isEqualTo(4);
         assertThat(s.cancelled()).isEqualTo(2);
-        assertThat(s.successRate()).isEqualTo(0.75);
+        assertThat(s.successRate()).isEqualTo(13.0 / 17);
+
+        // Issue #14 failed on attempt 1 and was fixed on attempt 2.
+        List<Ticket> flaky = tickets.attemptsFor(all.getFirst().repo(), 14);
+        assertThat(flaky).extracting(Ticket::attempt).containsExactly(2, 1);
+        assertThat(flaky).extracting(Ticket::state).containsExactly(TicketState.DONE, TicketState.FAILED);
+        assertThat(flaky.get(0).prNumber()).isNotEqualTo(flaky.get(1).prNumber());
         assertThat(s.totalCostUsd()).isPositive();
     }
 }
