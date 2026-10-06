@@ -163,7 +163,7 @@ engineer; they are rough.
 | **M2** ✅ | **Real GitHub client** (done; live run passed, see below) | `GitHubRestClient` (GitHub App auth from env), issues by label with paging, labeler permission check, open or find PR, review status, comments; host-side push | Contract suite passes against WireMock on every push and against a live test repo nightly; rate limits handled | 3–4 days |
 | **M3** ✅ | **Docker sandbox** (done, see below) | `DockerSandboxRunner`: one container per attempt, named `factory-<id>`, idempotent, resource limits, non-root, egress allowlist, no secrets inside; janitor for orphans | Contract and security tests pass on real Docker in CI; killing the app mid-step leaves no orphan after the janitor runs | 4–5 days |
 | **M4** ✅ | **Real checks** (done, see below) | `SandboxChecksRunner`: per-repo check command from config (e.g. `.factory.yml`), output truncation, timeout | Passes and fails correctly on a sample repo with a known failing test | 1–2 days |
-| **M5** 🟡 | **Claude Code agent** (built; live evaluation pending, see below) | `ClaudeCodeAgentRunner`: headless run in the sandbox with `--max-turns`, usage parsed into `AgentResult`, cancellation kills the process (finding 5), feedback loop from failed checks | Agent eval: at least 6 of 10 fixture issues reach DONE within limits; guardrails trip correctly on a deliberately oversized ticket; cancel stops spending within 10s | 4–6 days |
+| **M5** ✅ | **Claude Code agent** (done; live evaluation passed, see below) | `ClaudeCodeAgentRunner`: headless run in the sandbox with `--max-turns`, usage parsed into `AgentResult`, cancellation kills the process (finding 5), feedback loop from failed checks | Agent eval: at least 6 of 10 fixture issues reach DONE within limits; guardrails trip correctly on a deliberately oversized ticket; cancel stops spending within 10s | 4–6 days |
 | **M6** | **Security and operations** | Dashboard auth + CSRF (finding 8); metrics and MDC (finding 10); webhooks with polling fallback (finding 12); production config (finding 14) | Security tests pass; Prometheus shows queue depth, cost and outcomes; one load test run at 1,000 tickets | 3–4 days |
 | **M7** | **Pilot** | Run on one real low-risk repo with a small daily cost cap; reviewer agent and changes-requested edge (finding 13) can follow here | Two weeks of real tickets; success rate, cost per ticket and failure reasons reviewed weekly; no double runs, no leaked sandboxes, no secret exposure | 2 weeks elapsed |
 
@@ -280,7 +280,7 @@ proper one failed after the 30 s git timeout, as expected.
 - Checks don't watch for cancellation while running; a cancelled ticket notices after the checks finish (at most the
   checks timeout). Cancellation that stops running processes is part of M5 (finding 5).
 
-## M5 status: built, live evaluation pending
+## M5 status: done
 
 | Item | What changed | Proven by (no credential, every build) |
 |------|--------------|-----------------------------------------|
@@ -301,10 +301,25 @@ proper one failed after the 30 s git timeout, as expected.
 - *Guardrails trip on a deliberately oversized ticket* and *at least 6 of 10 fixture issues reach DONE within limits*:
   these need the real model. They are written (`AgentEvalTest`, `AgentGuardrailEvalTest`, tagged `agent-eval`) and run
   by the manual workflow **"Software Factory agent evaluation"** with the `CLAUDE_CODE_OAUTH_TOKEN` (or
-  `ANTHROPIC_API_KEY`) secret. Not run yet: the workflow can only be started once it is on main. The ten fixtures are
+  `ANTHROPIC_API_KEY`) secret. **Passed on the first live run** (below). The ten fixtures are
   checked on every build (`EvalFixturesTest`): each fails as written and passes with a reference fix, so a result
   says something about the agent. A dry run of the harness against the scripted model API produced the report as
   expected (0 of 10, since that model changes nothing).
+
+### M5 live evaluation, run 1 (2026-10-06): passed
+
+[Run 37520657685](https://github.com/thepredator07/thepredator07/actions/runs/37520657685), subscription token,
+the CLI's default model, `Tests run: 3, Failures: 0, Errors: 0, Skipped: 0`, 2 min 11 s in total.
+
+| Criterion | Result |
+|-----------|--------|
+| At least 6 of 10 fixture issues reach DONE within limits | Every fixture: the agent's first run succeeded (4 turns, 5 for `median`), the checks passed on the first try, no retries. The test's bar (DONE with the test file untouched, at least 6) passed; the per-fixture table is in the run's job summary. About 8 s and $0.016–0.019 per ticket |
+| Guardrail on a deliberately oversized ticket | 3-turn limit: the CLI stopped at its turn limit (`error_max_turns`, 4 turns reported, $0.03), the ticket ended FAILED on the turn guardrail |
+| Cancel stops spending within 10 s | Cancelled 15 s into a real run; the ticket was CANCELLED and the sandbox gone within the limit |
+
+Costs are the CLI's list-price estimates (about $0.21 for the whole run); on a subscription token they count against
+the plan's allowance instead. The fixtures are deliberately small; the pilot (M7) is where harder, real tickets get
+measured.
 
 Two bugs were found by the tests while building this:
 - `setsid` forks when it is a process-group leader (as `docker exec` runs it), and without `--wait` it returned at
