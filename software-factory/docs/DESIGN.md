@@ -162,6 +162,31 @@ work), `BranchPolicy` enforcement, complete issue listings with trigger times, s
 reported even on failure, prompt stop on interrupt, and bounded checks output. Cost is deliberately not promised:
 only the pipeline's guardrail can enforce it.
 
+## Real GitHub client (M2)
+
+`integration/github/`: `GitHubRestClient` over `GitHubHttp` (JDK `HttpClient` + Jackson), wired by
+`RealIntegrationsConfig`.
+
+| Concern | How |
+|---------|-----|
+| Auth | `GitHubAppAuth` signs an RS256 JWT with the App key (PKCS#1 as GitHub downloads it, or PKCS#8), exchanges it for an installation token, caches it until 5 minutes before expiry. Or a static `GITHUB_TOKEN`. App wins if any App setting is present. |
+| Complete listings | `getAllPages` follows `Link: rel="next"`; any failing page fails the whole call, so the poller never reconciles against a partial list. Pull requests returned by the issues API are skipped. |
+| Rate limit | GETs are cached by ETag and sent with `If-None-Match`; a `304` reuses the body and is free. Label events and permissions are fetched only for issues whose `updated_at` changed; permissions are cached 10 minutes. |
+| Rate-limit errors | `403/429` with `x-ratelimit-remaining: 0` (wait until `x-ratelimit-reset`) or `Retry-After` become `RateLimitedException`. The pipeline reschedules the job for that long **without** spending a retry. `5xx` and network errors are ordinary retryable `StepFailedException`s; other `4xx` are `GitHubApiException` with GitHub's message and `errors[]` details. |
+| Who may trigger | The latest `labeled` event for the trigger label gives the trigger time and the actor. The actor needs at least `min-labeler-permission` (default write) on the repo, or the issue is ignored, with one warning per trigger. |
+| Idempotent PR | Look up an open PR for `owner:head` first; if create still answers `422 ... already exists` (a race), look it up again. |
+| Approval | Merged = APPROVED; closed = CLOSED; otherwise the latest decisive review per reviewer counts: any outstanding CHANGES_REQUESTED = PENDING, else any APPROVED = APPROVED. Dismissed reviews drop out. |
+
+Not in M2: pushing the branch. On real GitHub a PR needs the branch to exist, and the branch comes from the sandbox
+(the agent commits there, the host pushes after `BranchPolicy`). That arrives with the Docker sandbox in M3, which is
+also why `factory.integrations=real` still refuses to start.
+
+**Tests:** `GitHubApiSimulator` is a small stateful HTTP server (JDK `HttpServer`) that behaves like the GitHub
+endpoints above, including paging, ETags, label events, permissions, App token exchange and injectable faults.
+`SimulatedGitHubClientContractTest` runs the shared contract over real HTTP; `GitHubRestClientTest` and
+`GitHubAppAuthTest` cover the rest. `LiveGitHubClientContractTest` (tag `live`) runs the same contract against a
+real throwaway repo from `.github/workflows/factory-live.yml`.
+
 ## Fakes
 
 Each fake takes its behavior from three places, in priority order:

@@ -38,7 +38,7 @@ mvn clean verify
 ```
 
 The tests need Docker: Testcontainers starts a real PostgreSQL 16, because the job queue depends on Postgres-only
-features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 211 tests in about 45 seconds. CI
+features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 249 tests in about 45 seconds. CI
 (`.github/workflows/factory-ci.yml`) runs the same command on every push and pull request.
 
 ## What is built vs. not built
@@ -59,7 +59,7 @@ features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 211 test
 | Docker Compose (app + postgres), GitHub Actions CI | Built |
 | Real Docker sandbox | **Not built** (Phase 2): stub in `integration/phase2/DockerSandboxRunner` |
 | Real Claude Code agent | **Not built** (Phase 2): stub in `integration/phase2/ClaudeCodeAgentRunner` |
-| Real GitHub API (issues, branches, PRs, reviews) | **Not built** (Phase 2): stub in `integration/phase2/GitHubRestClient` |
+| Real GitHub client (`GitHubRestClient`): GitHub App or token auth, complete paged issue listing, ETag caching, trigger time and labeler permission from label events, idempotent PR opening, review-based approval, rate-limit handling | Built (M2), tested against a GitHub API simulator; live nightly test ready but **not run yet** (needs the test repo) |
 | Real checks in the sandbox | **Not built** (Phase 2): stub in `integration/phase2/SandboxChecksRunner` |
 | Reviewer agent, auth on the dashboard, metrics export | **Not built** |
 
@@ -70,7 +70,10 @@ Everything is set through environment variables; see [`.env.example`](.env.examp
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `FACTORY_INTEGRATIONS` | `fake` | `fake` (Phase 1) or `real` (Phase 2; fails at startup until implemented) |
+| `FACTORY_INTEGRATIONS` | `fake` | `fake` (Phase 1) or `real` (Phase 2; fails at startup until sandbox, checks and agent exist) |
+| `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY_PATH` | none | Real GitHub via a GitHub App (recommended) |
+| `GITHUB_TOKEN` | none | Real GitHub via a token, if no App is configured |
+| `FACTORY_MIN_LABELER_PERMISSION` | `write` | Issues labeled by someone with less repo permission are ignored |
 | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | `jdbc:postgresql://localhost:5432/factory`, `factory`, empty | Postgres connection |
 | `FACTORY_REPO` / `FACTORY_TRIGGER_LABEL` | `example-org/example-repo` / `factory` | Which issues to pick up |
 | `FACTORY_MAX_COST_USD` | `2.00` | Ticket fails once its total agent cost goes over this |

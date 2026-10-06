@@ -38,9 +38,22 @@ public abstract class GitHubClientContract {
         return System.nanoTime() % 1_000_000_000L;
     }
 
+    /**
+     * Makes {@code head} a branch a PR can be opened from. Simulated GitHub doesn't care; real GitHub needs the branch
+     * to exist with at least one commit beyond base.
+     */
+    protected void prepareBranch(String head) {
+    }
+
     /** How many issues to create for the paging test. Real implementations can lower it to save API calls. */
     protected int manyIssues() {
         return 150;
+    }
+
+    private String newBranch() {
+        String head = "factory/" + newTicketId();
+        prepareBranch(head);
+        return head;
     }
 
     private PullRequestRequest pr(int issue, String head) {
@@ -84,7 +97,7 @@ public abstract class GitHubClientContract {
     @Test
     void opensAPullRequestFromTheFactoryBranchIntoBase() {
         int issue = openIssue("PR me", "", LABEL);
-        String head = "factory/" + newTicketId();
+        String head = newBranch();
 
         PullRequest pr = client().openPullRequest(pr(issue, head));
 
@@ -97,7 +110,7 @@ public abstract class GitHubClientContract {
     @Test
     void openingTheSamePullRequestAgainReturnsTheExistingOne() {
         int issue = openIssue("Retry me", "", LABEL);
-        String head = "factory/" + newTicketId();
+        String head = newBranch();
 
         PullRequest first = client().openPullRequest(pr(issue, head));
         PullRequest again = client().openPullRequest(pr(issue, head));
@@ -116,7 +129,7 @@ public abstract class GitHubClientContract {
     @Test
     void newPullRequestIsPendingUntilApproved() {
         int issue = openIssue("Review me", "", LABEL);
-        PullRequest pr = client().openPullRequest(pr(issue, "factory/" + newTicketId()));
+        PullRequest pr = client().openPullRequest(pr(issue, newBranch()));
 
         assertThat(client().getPullRequestStatus(repo(), pr.number())).isEqualTo(PrStatus.PENDING);
         approve(pr.number());

@@ -160,7 +160,7 @@ engineer; they are rough.
 |---|-----------|-----------|---------------|------|
 | **M0** ✅ | **Harden the core** (done, see below) | Findings 1, 2, 3, 9, 11. Heartbeat and fenced job updates; `factory.integrations` switch; fake-only controller; DB time for scheduling; executor bean | All "must exist" tests for leases, fencing and mode switching pass; multi-instance test passes | 2–3 days |
 | **M1** ✅ | **Contract tests + attempt model** (done, see below) | Abstract contract test per interface, run against the fakes; Flyway V2 for `attempts` (finding 6); poller reconciliation and paging (finding 7) | Fakes pass all contracts; V2 migrates a DB seeded by the demo without loss; re-labeling a failed issue starts attempt #2 | 3–4 days |
-| **M2** | **Real GitHub client** | `GitHubRestClient` (GitHub App auth from env), issues by label with paging, labeler permission check, open or find PR, review status, comments; host-side push | Contract suite passes against WireMock on every push and against a live test repo nightly; rate limits handled | 3–4 days |
+| **M2** 🟡 | **Real GitHub client** (built; live run pending, see below) | `GitHubRestClient` (GitHub App auth from env), issues by label with paging, labeler permission check, open or find PR, review status, comments; host-side push | Contract suite passes against WireMock on every push and against a live test repo nightly; rate limits handled | 3–4 days |
 | **M3** | **Docker sandbox** | `DockerSandboxRunner`: one container per attempt, named `factory-<id>`, idempotent, resource limits, non-root, egress allowlist, no secrets inside; janitor for orphans | Contract and security tests pass on real Docker in CI; killing the app mid-step leaves no orphan after the janitor runs | 4–5 days |
 | **M4** | **Real checks** | `SandboxChecksRunner`: per-repo check command from config (e.g. `.factory.yml`), output truncation, timeout | Passes and fails correctly on a sample repo with a known failing test | 1–2 days |
 | **M5** | **Claude Code agent** | `ClaudeCodeAgentRunner`: headless run in the sandbox with `--max-turns`, usage parsed into `AgentResult`, cancellation kills the process (finding 5), feedback loop from failed checks | Agent eval: at least 6 of 10 fixture issues reach DONE within limits; guardrails trip correctly on a deliberately oversized ticket; cancel stops spending within 10s | 4–6 days |
@@ -206,3 +206,23 @@ turn cap each makes its tests fail.
 
 Live check (demo mode, real Postgres): Flyway applied V1 and V2; re-labeling the failed issue #903 started attempt 2;
 closing issue #960 while its agent was running cancelled it, and the worker's job finished 0.12 s later.
+
+## M2 status: built, live run pending
+
+| Item | What changed | Proven by |
+|------|--------------|-----------|
+| `GitHubRestClient` | Issues by label (complete paging, PRs skipped), trigger time from label events, idempotent PR open with race handling, review-based approval, comments | `SimulatedGitHubClientContractTest` (the shared contract, 11 tests, real HTTP), `GitHubRestClientTest` (19) |
+| Auth | GitHub App (JWT, installation token cached and refreshed) or token | `GitHubAppAuthTest` (7) |
+| Labeler permission check (finding 8, first part) | Latest labeler needs write (configurable) | `GitHubRestClientTest.ignoresIssuesLabeledBySomeoneWithoutWriteAccess`, `theLatestLabelerCountsNotTheFirst` |
+| Rate limits | ETag caching; rate-limit errors pause the ticket without spending retries | `GitHubRestClientTest` (rate-limit and ETag tests), `TicketPipelineTest.rateLimitedStepWaitsForTheResetWithoutSpendingARetry` |
+| Live nightly | `LiveGitHubClientContractTest` + `factory-live.yml`, excluded from normal builds | **Not run yet:** needs the test repo (`FACTORY_LIVE_REPO` variable) and a token (`FACTORY_LIVE_TOKEN` secret) |
+| Host-side push | Moved to M3: the branch comes from the sandbox | — |
+
+Exit criteria: "passes on every push" is met, against the simulator instead of WireMock (decision 37). "Live test repo
+nightly" is written but waiting on the repo. M2 counts as done once the first live run passes.
+
+Bug found while testing: GitHub's "A pull request already exists" is in `errors[].message` of the 422 response, not in
+`message`. The first version only read `message`, so the PR-creation race fell through to a failure. Fixed, and covered.
+
+Mutation check: letting anyone trigger, dropping ETag reuse, dropping 422 details, ignoring review dismissals, and
+counting rate limits as retries each make tests fail.

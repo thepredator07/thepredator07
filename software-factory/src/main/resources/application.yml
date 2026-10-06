@@ -44,6 +44,14 @@ factory:
     max-turns: ${FACTORY_MAX_TURNS:40}
     hard-timeout: ${FACTORY_HARD_TIMEOUT:PT30M}
     max-retries: ${FACTORY_MAX_RETRIES:3}
+  # Real GitHub client (factory.integrations=real). Use a GitHub App (recommended) or a token. Secrets: env only.
+  github:
+    api-url: ${GITHUB_API_URL:https://api.github.com}
+    token: ${GITHUB_TOKEN:}
+    app-id: ${GITHUB_APP_ID:}
+    app-installation-id: ${GITHUB_APP_INSTALLATION_ID:}
+    app-private-key-path: ${GITHUB_APP_PRIVATE_KEY_PATH:}
+    min-labeler-permission: ${FACTORY_MIN_LABELER_PERMISSION:write}
   fakes:
     # Default behaviour of each fake: succeed | fail | fail-then-succeed
     sandbox: { mode: succeed, failures-before-success: 1 }
