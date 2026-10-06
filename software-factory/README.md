@@ -59,7 +59,7 @@ features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 287 test
 | Docker Compose (app + postgres), GitHub Actions CI | Built |
 | Docker sandbox (`DockerSandboxRunner`): one container per attempt, no network, no credentials, non-root, read-only root, all capabilities dropped, memory/CPU/process limits; code moves in and out as git bundles and the host pushes the branch; a janitor removes orphans | Built (M3), tested on real Docker |
 | Real Claude Code agent | **Not built** (Phase 2): stub in `integration/phase2/ClaudeCodeAgentRunner` |
-| Real GitHub client (`GitHubRestClient`): GitHub App or token auth, complete paged issue listing, ETag caching, trigger time and labeler permission from label events, idempotent PR opening, review-based approval, rate-limit handling | Built (M2), tested against a GitHub API simulator; live nightly test ready but **not run yet** (needs the test repo) |
+| Real GitHub client (`GitHubRestClient`): GitHub App or token auth, complete paged issue listing, ETag caching, trigger time and labeler permission from label events, idempotent PR opening, review-based approval, rate-limit handling | Built (M2), tested against a GitHub API simulator on every build and against real GitHub nightly (passing) |
 | Real checks in the sandbox | **Not built** (Phase 2): stub in `integration/phase2/SandboxChecksRunner` |
 | Reviewer agent, auth on the dashboard, metrics export | **Not built** |
 

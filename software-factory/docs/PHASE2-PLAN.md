@@ -160,7 +160,7 @@ engineer; they are rough.
 |---|-----------|-----------|---------------|------|
 | **M0** ✅ | **Harden the core** (done, see below) | Findings 1, 2, 3, 9, 11. Heartbeat and fenced job updates; `factory.integrations` switch; fake-only controller; DB time for scheduling; executor bean | All "must exist" tests for leases, fencing and mode switching pass; multi-instance test passes | 2–3 days |
 | **M1** ✅ | **Contract tests + attempt model** (done, see below) | Abstract contract test per interface, run against the fakes; Flyway V2 for `attempts` (finding 6); poller reconciliation and paging (finding 7) | Fakes pass all contracts; V2 migrates a DB seeded by the demo without loss; re-labeling a failed issue starts attempt #2 | 3–4 days |
-| **M2** 🟡 | **Real GitHub client** (built; live run pending, see below) | `GitHubRestClient` (GitHub App auth from env), issues by label with paging, labeler permission check, open or find PR, review status, comments; host-side push | Contract suite passes against WireMock on every push and against a live test repo nightly; rate limits handled | 3–4 days |
+| **M2** ✅ | **Real GitHub client** (done; live run passed, see below) | `GitHubRestClient` (GitHub App auth from env), issues by label with paging, labeler permission check, open or find PR, review status, comments; host-side push | Contract suite passes against WireMock on every push and against a live test repo nightly; rate limits handled | 3–4 days |
 | **M3** ✅ | **Docker sandbox** (done, see below) | `DockerSandboxRunner`: one container per attempt, named `factory-<id>`, idempotent, resource limits, non-root, egress allowlist, no secrets inside; janitor for orphans | Contract and security tests pass on real Docker in CI; killing the app mid-step leaves no orphan after the janitor runs | 4–5 days |
 | **M4** | **Real checks** | `SandboxChecksRunner`: per-repo check command from config (e.g. `.factory.yml`), output truncation, timeout | Passes and fails correctly on a sample repo with a known failing test | 1–2 days |
 | **M5** | **Claude Code agent** | `ClaudeCodeAgentRunner`: headless run in the sandbox with `--max-turns`, usage parsed into `AgentResult`, cancellation kills the process (finding 5), feedback loop from failed checks | Agent eval: at least 6 of 10 fixture issues reach DONE within limits; guardrails trip correctly on a deliberately oversized ticket; cancel stops spending within 10s | 4–6 days |
@@ -207,7 +207,7 @@ turn cap each makes its tests fail.
 Live check (demo mode, real Postgres): Flyway applied V1 and V2; re-labeling the failed issue #903 started attempt 2;
 closing issue #960 while its agent was running cancelled it, and the worker's job finished 0.12 s later.
 
-## M2 status: built, live run pending
+## M2 status: done
 
 | Item | What changed | Proven by |
 |------|--------------|-----------|
@@ -215,7 +215,7 @@ closing issue #960 while its agent was running cancelled it, and the worker's jo
 | Auth | GitHub App (JWT, installation token cached and refreshed) or token | `GitHubAppAuthTest` (7) |
 | Labeler permission check (finding 8, first part) | Latest labeler needs write (configurable) | `GitHubRestClientTest.ignoresIssuesLabeledBySomeoneWithoutWriteAccess`, `theLatestLabelerCountsNotTheFirst` |
 | Rate limits | ETag caching; rate-limit errors pause the ticket without spending retries | `GitHubRestClientTest` (rate-limit and ETag tests), `TicketPipelineTest.rateLimitedStepWaitsForTheResetWithoutSpendingARetry` |
-| Live nightly | `LiveGitHubClientContractTest` + `factory-live.yml`, excluded from normal builds | **Not run yet:** needs the test repo (`FACTORY_LIVE_REPO` variable) and a token (`FACTORY_LIVE_TOKEN` secret) |
+| Live nightly | `LiveGitHubClientContractTest` + `factory-live.yml`, excluded from normal builds | **Passed 11/11 against real GitHub** (`thepredator07/factory-playground`, run 3, 2026-10-06); runs nightly from now on |
 | Host-side push | Moved to M3: the branch comes from the sandbox | — |
 
 Exit criteria: "passes on every push" is met, against the simulator instead of WireMock (decision 37). "Live test repo
@@ -266,4 +266,7 @@ not the client. It prefixes the issues it creates with `[contract test] ` so the
 expected the bare title. GitHub returned exactly what was created. Fix: the fixture declares its prefix
 (`expectedTitle`), and the contract compares against that.
 
-Next: re-run the live workflow. M2 is done when it passes.
+### M2 live run, attempt 3: 11 of 11 passed
+
+[Run 3](https://github.com/thepredator07/thepredator07/actions/runs/37506047522): `Tests run: 11, Failures: 0, Errors: 0,
+Skipped: 0` against real GitHub. **M2 is done.** The workflow keeps running nightly at 03:17 UTC.
