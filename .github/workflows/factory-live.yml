@@ -1,0 +1,52 @@
+name: Software Factory live GitHub tests
+
+# Runs the GitHub client contract against a real throwaway repository.
+# Configure in Settings > Secrets and variables > Actions:
+#   variable FACTORY_LIVE_REPO   owner/name of the test repo (never a real project)
+#   secret   FACTORY_LIVE_TOKEN  token with issues, pull requests and contents write access to that repo
+# Without them, the job reports "not configured" and succeeds.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: factory-live
+  cancel-in-progress: false
+
+jobs:
+  live-github:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: software-factory
+    env:
+      FACTORY_LIVE_REPO: ${{ vars.FACTORY_LIVE_REPO }}
+      FACTORY_LIVE_TOKEN: ${{ secrets.FACTORY_LIVE_TOKEN }}
+    steps:
+      - name: Check configuration
+        id: config
+        working-directory: .
+        run: |
+          if [ -z "$FACTORY_LIVE_REPO" ] || [ -z "$FACTORY_LIVE_TOKEN" ]; then
+            echo "Live GitHub tests not configured (FACTORY_LIVE_REPO / FACTORY_LIVE_TOKEN); skipping."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.config.outputs.configured == 'true'
+      - uses: actions/setup-java@v4
+        if: steps.config.outputs.configured == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: software-factory/pom.xml
+      - name: Live contract tests
+        if: steps.config.outputs.configured == 'true'
+        run: mvn -B test -Dgroups=live -Dsurefire.excludedGroups=

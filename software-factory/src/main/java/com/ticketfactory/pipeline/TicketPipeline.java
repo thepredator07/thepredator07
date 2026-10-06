@@ -9,6 +9,7 @@ import com.ticketfactory.integration.AgentRunner.AgentResult;
 import com.ticketfactory.integration.BranchPolicy;
 import com.ticketfactory.integration.ChecksRunner;
 import com.ticketfactory.integration.GitHubClient;
+import com.ticketfactory.integration.RateLimitedException;
 import com.ticketfactory.integration.SandboxRunner;
 import com.ticketfactory.integration.StepFailedException;
 import com.ticketfactory.integration.TicketContext;
@@ -102,6 +103,11 @@ public class TicketPipeline implements JobHandler {
                 return JobOutcome.abandon(e.getMessage());
             } catch (GuardrailExceededException e) {
                 failQuietly(id, e.getMessage());
+            } catch (RateLimitedException e) {
+                // Not the ticket's fault: wait for the limit to reset, without spending one of its retries.
+                log.info("Ticket {} step {} rate limited, waiting {}: {}", id, ticket.state(), e.retryAfter(),
+                        e.getMessage());
+                return JobOutcome.reschedule(e.retryAfter(), "rate limited: " + e.getMessage());
             } catch (StepFailedException e) {
                 JobOutcome outcome = onStepFailure(ticket, e);
                 if (outcome != null) {

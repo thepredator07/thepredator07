@@ -23,6 +23,8 @@ public class FakeGitHubClient extends AbstractFake implements GitHubClient {
     private final List<String> comments = new CopyOnWriteArrayList<>();
     private final AtomicInteger prNumbers = new AtomicInteger(1000);
     private volatile boolean listingFails;
+    private final AtomicInteger rateLimitedCalls = new AtomicInteger();
+    private volatile java.time.Duration rateLimitWait = java.time.Duration.ZERO;
     private final java.util.concurrent.atomic.AtomicReference<Instant> lastTrigger =
             new java.util.concurrent.atomic.AtomicReference<>();
 
@@ -97,12 +99,19 @@ public class FakeGitHubClient extends AbstractFake implements GitHubClient {
     public void reset() {
         super.reset();
         listingFails = false;
+        rateLimitedCalls.set(0);
         issues.clear();
         prs.clear();
         comments.clear();
     }
 
     // ---- GitHubClient ----
+
+    /** The next {@code calls} PR openings fail with a rate limit lasting {@code retryAfter} (tests). */
+    public void rateLimitNextPullRequests(int calls, java.time.Duration retryAfter) {
+        rateLimitedCalls.set(calls);
+        rateLimitWait = retryAfter;
+    }
 
     /** Makes {@link #listOpenIssues} throw, like a GitHub outage (tests). */
     public void setListingFails(boolean fails) {
@@ -127,6 +136,10 @@ public class FakeGitHubClient extends AbstractFake implements GitHubClient {
     @Override
     public PullRequest openPullRequest(PullRequestRequest req) {
         BranchPolicy.validatePullRequest(req.head(), req.base());
+        if (rateLimitedCalls.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
+            throw new com.ticketfactory.integration.RateLimitedException(
+                    "fake github: secondary rate limit (simulated)", rateLimitWait);
+        }
         for (OpenedPr existing : prs.values()) {
             if (existing.pr().head().equals(req.head()) && existing.repo().equals(req.repo())
                     && existing.status() != PrStatus.CLOSED) {

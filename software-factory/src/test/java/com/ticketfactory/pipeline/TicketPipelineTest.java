@@ -320,4 +320,28 @@ class TicketPipelineTest extends PipelineTestSupport {
         assertThat(github.openedPullRequests()).as("no duplicate PR").hasSize(1);
         assertThat(t.prNumber()).isEqualTo(orphan.number());
     }
+
+    // ---- M2: rate limits wait for the reset and don't spend retries ----
+
+    @Test
+    void rateLimitedStepWaitsForTheResetWithoutSpendingARetry() {
+        github.rateLimitNextPullRequests(5, java.time.Duration.ofMinutes(7)); // more than max-retries
+        long id = submit(1, "Busy API", "");
+
+        runUntilIdle();
+
+        Ticket t = ticket(id);
+        assertThat(t.state()).as("parked, not failed").isEqualTo(CHECKS);
+        assertThat(t.retries()).isZero();
+        Job parked = queue.findActiveForTicket(id).orElseThrow();
+        assertThat(parked.lastError()).startsWith("rate limited:");
+        assertThat(parked.runAfter()).isAfter(java.time.Instant.now().plus(java.time.Duration.ofMinutes(6)));
+
+        for (int i = 0; i < 5; i++) { // each wake-up hits the limit once more, then it clears
+            wakeUpJobs();
+            runUntilIdle();
+        }
+        assertThat(ticket(id).state()).isEqualTo(DONE);
+        assertThat(ticket(id).retries()).isZero();
+    }
 }
