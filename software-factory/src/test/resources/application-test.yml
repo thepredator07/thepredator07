@@ -5,3 +5,5 @@ factory:
     approval-poll-interval: PT1H
   poller:
     enabled: false
+  sandbox:
+    janitor-enabled: false

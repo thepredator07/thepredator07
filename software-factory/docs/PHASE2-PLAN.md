@@ -161,7 +161,7 @@ engineer; they are rough.
 | **M0** ✅ | **Harden the core** (done, see below) | Findings 1, 2, 3, 9, 11. Heartbeat and fenced job updates; `factory.integrations` switch; fake-only controller; DB time for scheduling; executor bean | All "must exist" tests for leases, fencing and mode switching pass; multi-instance test passes | 2–3 days |
 | **M1** ✅ | **Contract tests + attempt model** (done, see below) | Abstract contract test per interface, run against the fakes; Flyway V2 for `attempts` (finding 6); poller reconciliation and paging (finding 7) | Fakes pass all contracts; V2 migrates a DB seeded by the demo without loss; re-labeling a failed issue starts attempt #2 | 3–4 days |
 | **M2** 🟡 | **Real GitHub client** (built; live run pending, see below) | `GitHubRestClient` (GitHub App auth from env), issues by label with paging, labeler permission check, open or find PR, review status, comments; host-side push | Contract suite passes against WireMock on every push and against a live test repo nightly; rate limits handled | 3–4 days |
-| **M3** | **Docker sandbox** | `DockerSandboxRunner`: one container per attempt, named `factory-<id>`, idempotent, resource limits, non-root, egress allowlist, no secrets inside; janitor for orphans | Contract and security tests pass on real Docker in CI; killing the app mid-step leaves no orphan after the janitor runs | 4–5 days |
+| **M3** ✅ | **Docker sandbox** (done, see below) | `DockerSandboxRunner`: one container per attempt, named `factory-<id>`, idempotent, resource limits, non-root, egress allowlist, no secrets inside; janitor for orphans | Contract and security tests pass on real Docker in CI; killing the app mid-step leaves no orphan after the janitor runs | 4–5 days |
 | **M4** | **Real checks** | `SandboxChecksRunner`: per-repo check command from config (e.g. `.factory.yml`), output truncation, timeout | Passes and fails correctly on a sample repo with a known failing test | 1–2 days |
 | **M5** | **Claude Code agent** | `ClaudeCodeAgentRunner`: headless run in the sandbox with `--max-turns`, usage parsed into `AgentResult`, cancellation kills the process (finding 5), feedback loop from failed checks | Agent eval: at least 6 of 10 fixture issues reach DONE within limits; guardrails trip correctly on a deliberately oversized ticket; cancel stops spending within 10s | 4–6 days |
 | **M6** | **Security and operations** | Dashboard auth + CSRF (finding 8); metrics and MDC (finding 10); webhooks with polling fallback (finding 12); production config (finding 14) | Security tests pass; Prometheus shows queue depth, cost and outcomes; one load test run at 1,000 tickets | 3–4 days |
@@ -226,3 +226,23 @@ Bug found while testing: GitHub's "A pull request already exists" is in `errors[
 
 Mutation check: letting anyone trigger, dropping ETag reuse, dropping 422 details, ignoring review dismissals, and
 counting rate limits as retries each make tests fail.
+
+## M3 status: done
+
+| Item | What changed | Proven by |
+|------|--------------|-----------|
+| `DockerSandboxRunner` | One container per attempt, idempotent `prepare`, `publishBranch`, `destroy`, `list`, `exec` | `DockerSandboxRunnerContractTest` (the shared contract plus reuse and stopped-container tests, 11), on real Docker |
+| Isolation and no secrets | No network, user 1000, read-only root, all capabilities dropped, no-new-privileges, limits; token stays on the host | `DockerSandboxSecurityTest` (8): checked from inside the container and via `docker inspect` |
+| Host-side push (moved from M2) | `HostGit`: bare clone per repo, bundle in, bundle out, push only `factory/*` | `DockerSandboxSecurityTest.theAgentsCommitsReachTheRemoteBranchAndMainIsUntouched`, `cannotPublishToMainEvenIfTheBranchIsRenamedInside` |
+| Pipeline | Pushes the branch before opening the PR | `DockerSandboxPipelineTest.ticketReachesDoneThroughARealSandboxAndItsBranchIsPushed` |
+| Crash recovery and janitor (finding 4) | Next worker reuses the sandbox; janitor removes sandboxes of finished or missing tickets | `DockerSandboxPipelineTest` (crash and janitor tests), `SandboxJanitorTest` |
+| Egress allowlist | Not needed yet (no network at all); moved to M5 with the agent (decision 44) | — |
+
+Exit criteria: contract and security tests pass on real Docker, and the GitHub Actions runners have Docker, so they
+run in CI. "Killing the app mid-step leaves no orphan after the janitor runs" is covered by the janitor tests.
+
+Mutation check: turning the network on, a writable root, keeping capabilities, a token in the environment,
+recreating instead of reusing, the janitor ignoring finished tickets, and removing both branch-policy checks on publish
+each make tests fail. Two of these first *survived*, which showed two weak tests. Effective capabilities are always
+zero for a non-root user, so the test now checks the bounding set. A recreated container keeps its name, so the reuse
+test now checks the container id and a file written inside. Both are fixed.

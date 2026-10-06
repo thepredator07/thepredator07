@@ -21,6 +21,14 @@ public abstract class SandboxRunnerContract {
     /** Whether the sandbox with this id currently exists. */
     protected abstract boolean exists(String sandboxId);
 
+    /** Whether {@code branch} of {@code repo} exists on the remote (after a publish). */
+    protected abstract boolean isPublished(String repo, String branch);
+
+    /** Repository the tickets point at; the remote must exist for real implementations. */
+    protected String repo() {
+        return "example-org/example-repo";
+    }
+
     /** A runner whose sandboxes fail to start, if the implementation can simulate it. */
     protected Optional<SandboxRunner> failingRunner() {
         return Optional.empty();
@@ -29,7 +37,7 @@ public abstract class SandboxRunnerContract {
     private final java.util.List<String> toCleanUp = new java.util.ArrayList<>();
 
     protected TicketContext ticket(long id) {
-        return new TicketContext(id, "example-org/example-repo", (int) id, "Contract", "", "factory/" + id);
+        return new TicketContext(id, repo(), (int) id, "Contract", "", "factory/" + id);
     }
 
     private Sandbox prepare(long ticketId) {
@@ -84,5 +92,36 @@ public abstract class SandboxRunnerContract {
         Optional<SandboxRunner> failing = failingRunner();
         assumeTrue(failing.isPresent(), "implementation cannot simulate a startup failure");
         assertThatThrownBy(() -> failing.get().prepare(ticket(107))).isInstanceOf(StepFailedException.class);
+    }
+
+    @Test
+    void publishPushesTheTicketBranchAndIsIdempotent() {
+        TicketContext t = ticket(108);
+        Sandbox s = prepare(108);
+        runner().publishBranch(t, s.id());
+        assertThat(isPublished(repo(), t.branchName())).isTrue();
+        assertThatCode(() -> runner().publishBranch(t, s.id())).as("publishing again is a no-op")
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void publishRefusesBranchesOutsideTheFactoryNamespace() {
+        Sandbox s = prepare(109);
+        for (String bad : new String[]{"main", "master", "feature/x", "factory/"}) {
+            TicketContext t = new TicketContext(109, repo(), 109, "Contract", "", bad);
+            assertThatThrownBy(() -> runner().publishBranch(t, s.id())).as(bad)
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThat(isPublished(repo(), "feature/x")).isFalse();
+    }
+
+    @Test
+    void listShowsPreparedSandboxesWithTheirTicketAndForgetsDestroyedOnes() {
+        Sandbox a = prepare(110);
+        Sandbox b = prepare(111);
+        runner().destroy(b.id());
+        assertThat(runner().list()).extracting(SandboxRunner.Sandbox::id).contains(a.id()).doesNotContain(b.id());
+        assertThat(runner().list()).filteredOn(x -> x.id().equals(a.id())).singleElement()
+                .extracting(SandboxRunner.Sandbox::ticketId).isEqualTo(a.ticketId());
     }
 }
