@@ -40,7 +40,8 @@
       <tr th:each="t : ${tickets}">
         <td><a th:href="@{/tickets/{id}(id=${t.id})}" th:text="${t.id}">1</a></td>
         <td><a th:href="@{/tickets/{id}(id=${t.id})}" th:text="${t.title}">Title</a>
-          <div class="muted" th:text="${t.repo + '#' + t.issueNumber}">repo#1</div></td>
+          <div class="muted"><span th:text="${t.repo + '#' + t.issueNumber}">repo#1</span>
+            <span th:if="${t.attempt > 1}" th:text="'· attempt ' + ${t.attempt}">· attempt 2</span></div></td>
         <td><span class="badge" th:classappend="${t.state}" th:text="${t.state}">STATE</span></td>
         <td class="num" th:text="${@fmt.tokens(t.totalTokens())}">0</td>
         <td class="num" th:text="${@fmt.usd(t.costUsd)}">$0</td>

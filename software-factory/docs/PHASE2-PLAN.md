@@ -159,7 +159,7 @@ engineer; they are rough.
 | # | Milestone | Main work | Exit criteria | Est. |
 |---|-----------|-----------|---------------|------|
 | **M0** ✅ | **Harden the core** (done, see below) | Findings 1, 2, 3, 9, 11. Heartbeat and fenced job updates; `factory.integrations` switch; fake-only controller; DB time for scheduling; executor bean | All "must exist" tests for leases, fencing and mode switching pass; multi-instance test passes | 2–3 days |
-| **M1** | **Contract tests + attempt model** | Abstract contract test per interface, run against the fakes; Flyway V2 for `attempts` (finding 6); poller reconciliation and paging (finding 7) | Fakes pass all contracts; V2 migrates a DB seeded by the demo without loss; re-labeling a failed issue starts attempt #2 | 3–4 days |
+| **M1** ✅ | **Contract tests + attempt model** (done, see below) | Abstract contract test per interface, run against the fakes; Flyway V2 for `attempts` (finding 6); poller reconciliation and paging (finding 7) | Fakes pass all contracts; V2 migrates a DB seeded by the demo without loss; re-labeling a failed issue starts attempt #2 | 3–4 days |
 | **M2** | **Real GitHub client** | `GitHubRestClient` (GitHub App auth from env), issues by label with paging, labeler permission check, open or find PR, review status, comments; host-side push | Contract suite passes against WireMock on every push and against a live test repo nightly; rate limits handled | 3–4 days |
 | **M3** | **Docker sandbox** | `DockerSandboxRunner`: one container per attempt, named `factory-<id>`, idempotent, resource limits, non-root, egress allowlist, no secrets inside; janitor for orphans | Contract and security tests pass on real Docker in CI; killing the app mid-step leaves no orphan after the janitor runs | 4–5 days |
 | **M4** | **Real checks** | `SandboxChecksRunner`: per-repo check command from config (e.g. `.factory.yml`), output truncation, timeout | Passes and fails correctly on a sample repo with a known failing test | 1–2 days |
@@ -190,3 +190,19 @@ trustworthy.
 
 Mutation check: with the heartbeat turned off, `TwoInstancesTest` and the two `WorkerTest` lease tests fail; with it
 on, they pass. So these tests guard the fix.
+
+## M1 status: done
+
+| Item | What changed | Proven by |
+|------|--------------|-----------|
+| Contract tests | Abstract suites for all four interfaces in `src/test/.../contract/`; the fakes pass all 24 tests | `Fake*ContractTest` (4 classes) |
+| 4. Idempotent side effects | Fake sandbox reuses a ticket's sandbox; `openPullRequest` returns the open PR for the same branch (both now contract requirements) | `TicketPipelineTest.sandboxLeftByACrashedRunIsReusedNotDuplicated`, `prOpenedByACrashedRunIsFoundNotDuplicated` |
+| 6. One ticket per issue | V2 migration: `attempt`, `triggered_at`, one unfinished attempt per issue; re-applying the label starts the next attempt (decisions 28–30) | `AttemptsTest` (4), `MigrationTest` (Phase 1 data through V2), `DemoSeederTest` |
+| 7. Poller only adds | Reconciliation: closed or unlabeled issue cancels an attempt without a PR; a failed listing cancels nothing; listing must be complete | `GitHubPollerTest` (4 new) |
+| Janitor for orphaned sandboxes (from finding 4) | Not done here: it needs a real sandbox to look for orphans in. Already part of M3. | — |
+
+Mutation check: breaking PR idempotency, the "no cancel once a PR exists" rule, the trigger-time rule, or the agent
+turn cap each makes its tests fail.
+
+Live check (demo mode, real Postgres): Flyway applied V1 and V2; re-labeling the failed issue #903 started attempt 2;
+closing issue #960 while its agent was running cancelled it, and the worker's job finished 0.12 s later.

@@ -1,5 +1,6 @@
 package com.ticketfactory.integration;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
@@ -9,16 +10,24 @@ import java.util.Set;
  */
 public interface GitHubClient {
 
+    /**
+     * Every open issue in {@code repo} carrying {@code label}. Must be complete: implementations page internally, and
+     * throw rather than return a partial list (the poller cancels tickets whose issue is missing from it).
+     */
     List<Issue> listOpenIssues(String repo, String label);
 
-    /** Opens a PR from {@code head} into {@code base}. Implementations must refuse to target or push to main. */
+    /**
+     * Opens a PR from {@code head} into {@code base}, or returns the already-open PR for {@code head} (idempotent, so
+     * a retry after a crash never opens a duplicate). Must enforce {@link BranchPolicy}.
+     */
     PullRequest openPullRequest(PullRequestRequest request);
 
     PrStatus getPullRequestStatus(String repo, int prNumber);
 
     void commentOnIssue(String repo, int issueNumber, String body);
 
-    record Issue(String repo, int number, String title, String body, Set<String> labels) {
+    /** @param triggeredAt when the trigger label was (last) applied; re-applying it starts a new attempt */
+    record Issue(String repo, int number, String title, String body, Set<String> labels, Instant triggeredAt) {
     }
 
     record PullRequestRequest(String repo, int issueNumber, String head, String base, String title, String body) {

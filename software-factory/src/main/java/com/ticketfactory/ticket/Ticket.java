@@ -4,10 +4,12 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 
+/** One attempt at a GitHub issue. An issue can have several attempts, numbered from 1. */
 public record Ticket(
         long id,
         String repo,
         int issueNumber,
+        int attempt,
         String title,
         String body,
         TicketState state,
@@ -22,6 +24,7 @@ public record Ticket(
         BigDecimal costUsd,
         int turns,
         int retries,
+        Instant triggeredAt,
         Instant createdAt,
         Instant updatedAt,
         Instant startedAt,

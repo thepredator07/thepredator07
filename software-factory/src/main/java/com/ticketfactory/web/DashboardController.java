@@ -68,6 +68,7 @@ public class DashboardController {
         model.addAttribute("t", ticket);
         model.addAttribute("history", history);
         model.addAttribute("jobs", queue.findByTicket(id));
+        model.addAttribute("attempts", tickets.attemptsFor(ticket.repo(), ticket.issueNumber()));
         model.addAttribute("now", clock.instant());
         model.addAttribute("props", props);
         return "ticket";

@@ -288,4 +288,36 @@ class TicketPipelineTest extends PipelineTestSupport {
         assertThat(t.state()).as("left for the new owner to continue").isEqualTo(CODING);
         assertThat(t.turns()).as("no usage recorded by the abandoned run").isZero();
     }
+
+    // ---- M1: crash between an external side effect and the DB write ----
+
+    @Test
+    void sandboxLeftByACrashedRunIsReusedNotDuplicated() {
+        long id = submit(1, "Crash after sandbox", "");
+        // A previous run created the sandbox, then died before saving its id.
+        sandbox.prepare(new com.ticketfactory.integration.TicketContext(id, props.repo(), 1, "x", "",
+                com.ticketfactory.integration.BranchPolicy.branchFor(id)));
+        assertThat(sandbox.createdCount()).isEqualTo(1);
+
+        runUntilIdle();
+
+        assertThat(ticket(id).state()).isEqualTo(DONE);
+        assertThat(sandbox.createdCount()).as("no second sandbox").isEqualTo(1);
+        assertThat(sandbox.liveCount()).as("nothing left over").isZero();
+    }
+
+    @Test
+    void prOpenedByACrashedRunIsFoundNotDuplicated() {
+        long id = submit(1, "Crash after PR", "");
+        // A previous run opened the PR on GitHub, then died before saving its number.
+        var orphan = github.openPullRequest(new com.ticketfactory.integration.GitHubClient.PullRequestRequest(
+                props.repo(), 1, "factory/" + id, "main", "t", "Closes #1"));
+
+        runUntilIdle();
+
+        Ticket t = ticket(id);
+        assertThat(t.state()).isEqualTo(DONE);
+        assertThat(github.openedPullRequests()).as("no duplicate PR").hasSize(1);
+        assertThat(t.prNumber()).isEqualTo(orphan.number());
+    }
 }

@@ -9,6 +9,7 @@ import java.util.Map;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -39,6 +40,20 @@ public class FakeGitHubController {
         return ResponseEntity.accepted().body(Map.of(
                 "repo", props.repo(), "issue", issue.number(), "labels", labels,
                 "note", "The poller picks it up within factory.poller.interval"));
+    }
+
+    /** Removes and re-applies the trigger label: if the issue's last attempt finished, the next poll starts a new one. */
+    @PostMapping("/issues/{number}/relabel")
+    public ResponseEntity<Map<String, Object>> relabel(@PathVariable int number) {
+        github.relabel(props.repo(), number, props.triggerLabel());
+        return ResponseEntity.accepted().body(Map.of("issue", number, "note", "re-labeled; next poll may start a new attempt"));
+    }
+
+    /** Closes the issue: a running attempt without a PR yet is cancelled on the next poll. */
+    @PostMapping("/issues/{number}/close")
+    public ResponseEntity<Map<String, Object>> close(@PathVariable int number) {
+        github.closeIssue(props.repo(), number);
+        return ResponseEntity.accepted().body(Map.of("issue", number, "note", "closed"));
     }
 
     @GetMapping("/pull-requests")
