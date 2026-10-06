@@ -72,6 +72,12 @@ class LiveGitHubClientContractTest extends GitHubClientContract {
         return repo;
     }
 
+    /** GitHub's labelled-issue listing lags behind writes by a few seconds; allow generously. */
+    @Override
+    protected Duration listingConsistencyWait() {
+        return Duration.ofSeconds(90);
+    }
+
     @Override
     protected int manyIssues() {
         return 5; // with page size 2: three pages

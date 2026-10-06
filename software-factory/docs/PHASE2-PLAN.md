@@ -246,3 +246,17 @@ recreating instead of reusing, the janitor ignoring finished tickets, and removi
 each make tests fail. Two of these first *survived*, which showed two weak tests. Effective capabilities are always
 zero for a non-root user, so the test now checks the bounding set. A recreated container keeps its name, so the reuse
 test now checks the container id and a file written inside. Both are fixed.
+
+### M2 live run, attempt 1 (2026-10-06): 8 of 11 passed
+
+Against `thepredator07/factory-playground`, these passed on real GitHub: opening a PR, idempotent re-open, branch
+refusals, approval (via merge) and comments. The three issue-listing tests failed. GitHub's labelled-issue listing lags
+a few seconds behind writes: a just-created issue (#7) was missing, while a just-closed one (#5) was still listed.
+
+Fixes (decisions 50–52):
+- The contract's listing tests wait for consistency on real GitHub only.
+- The poller needs two consecutive misses before cancelling, so a stale read can't cancel a healthy ticket.
+- The simulator can lag the same way. With the lag on and the retry off it reproduces the same 3 failures; with the
+  retry on it passes.
+
+Next: re-run the live workflow. M2 is done when it passes.
