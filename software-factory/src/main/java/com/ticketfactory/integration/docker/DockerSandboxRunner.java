@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
  *   <li><b>No network</b> ({@code --network none}) and <b>no credentials</b>: code goes in and out as git bundles,
  *       streamed through {@code docker exec}; the host does all fetching and pushing ({@link HostGit}).</li>
  *   <li>Non-root user 1000, read-only root filesystem, all capabilities dropped, {@code no-new-privileges}, limits on
- *       memory, CPU and processes.</li>
+ *       memory, CPU and processes; an init process reaps orphans.</li>
  *   <li>{@code /workspace} and {@code /tmp} are size-limited tmpfs owned by the sandbox user. A sandbox that stopped
  *       (Docker or host restart) has lost its workspace, so {@link #prepare} replaces it instead of reusing it.</li>
  *   <li>Labelled {@code factory.managed=true} and {@code factory.ticket-id=<id>} so the janitor can find orphans.</li>
@@ -42,7 +42,7 @@ public class DockerSandboxRunner implements SandboxRunner {
 
     public static final String LABEL_MANAGED = "factory.managed";
     public static final String LABEL_TICKET = "factory.ticket-id";
-    static final String REPO_DIR = "/workspace/repo";
+    public static final String REPO_DIR = "/workspace/repo";
     private static final String SANDBOX_USER = "1000:1000";
     private static final Logger log = LoggerFactory.getLogger(DockerSandboxRunner.class);
 
@@ -143,8 +143,17 @@ public class DockerSandboxRunner implements SandboxRunner {
     /** Runs a command inside the sandbox as the sandbox user. Used by checks (M4) and the agent (M5). */
     public ExecResult exec(String sandboxId, Duration timeout, String... cmd) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        int code = run(sandboxId, timeout, null, out, out, cmd);
+        int code = run(sandboxId, timeout, null, out, out, null, List.of(), cmd);
         return new ExecResult(code, out.toString(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Runs {@code cmd} in {@code workdir} (null: the repo) with extra environment variables, streaming stdout and
+     * stderr into {@code out} as they arrive, so the caller decides how much to keep. Returns the exit code.
+     */
+    public int exec(String sandboxId, Duration timeout, String workdir, List<String> env, java.io.OutputStream out,
+                    String... cmd) {
+        return run(sandboxId, timeout, null, out, out, workdir == null ? REPO_DIR : workdir, env, cmd);
     }
 
     /**
@@ -152,9 +161,16 @@ public class DockerSandboxRunner implements SandboxRunner {
      * files move in and out: Docker's archive API refuses to write into a container with a read-only root filesystem.
      */
     private int run(String sandboxId, Duration timeout, InputStream stdin, java.io.OutputStream stdout,
-                    java.io.OutputStream stderr, String... cmd) {
-        String execId = docker.execCreateCmd(sandboxId).withCmd(cmd).withAttachStdout(true).withAttachStderr(true)
-                .withAttachStdin(stdin != null).exec().getId();
+                    java.io.OutputStream stderr, String workdir, List<String> env, String... cmd) {
+        var create = docker.execCreateCmd(sandboxId).withCmd(cmd).withAttachStdout(true).withAttachStderr(true)
+                .withAttachStdin(stdin != null);
+        if (workdir != null) {
+            create = create.withWorkingDir(workdir);
+        }
+        if (!env.isEmpty()) {
+            create = create.withEnv(env);
+        }
+        String execId = create.exec().getId();
         var start = docker.execStartCmd(execId);
         if (stdin != null) {
             start = start.withStdIn(stdin);
@@ -224,6 +240,9 @@ public class DockerSandboxRunner implements SandboxRunner {
                 .withMemorySwap(SandboxProperties.bytes(props.memory())) // no swap on top
                 .withNanoCPUs((long) (props.cpus() * 1_000_000_000L))
                 .withPidsLimit(props.pidsLimit())
+                // An init process as PID 1 reaps orphans. Without it, every process killed by a check timeout stays a
+                // zombie (sleep, the main process, never reaps) and they add up to the pids limit.
+                .withInit(true)
                 .withTmpFs(Map.of(
                         "/workspace", "rw,uid=1000,gid=1000,mode=0755,size=" + props.workspaceSize(),
                         "/tmp", "rw,uid=1000,gid=1000,mode=1777,size=" + props.tmpSize()));
@@ -253,7 +272,7 @@ public class DockerSandboxRunner implements SandboxRunner {
             // head -c stops after exactly N bytes. `cat` would wait for end-of-input, which docker-java's stdin never
             // signals (the exec would hang until its timeout).
             long size = Files.size(file);
-            int code = run(container, Duration.ofMinutes(5), in, err, err, "sh", "-c",
+            int code = run(container, Duration.ofMinutes(5), in, err, err, null, List.of(), "sh", "-c",
                     "head -c " + size + " > " + target + " && test $(wc -c < " + target + ") -eq " + size);
             if (code != 0) {
                 throw new StepFailedException("copy into sandbox failed: " + err.toString(StandardCharsets.UTF_8));
@@ -268,7 +287,7 @@ public class DockerSandboxRunner implements SandboxRunner {
         try {
             Path file = Files.createTempFile("factory-out-", ".bundle");
             try (var out = Files.newOutputStream(file)) {
-                int code = run(container, Duration.ofMinutes(5), null, out, err, "cat", source);
+                int code = run(container, Duration.ofMinutes(5), null, out, err, null, List.of(), "cat", source);
                 if (code != 0) {
                     throw new StepFailedException("copy out of sandbox failed: " + err.toString(StandardCharsets.UTF_8));
                 }

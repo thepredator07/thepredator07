@@ -12,6 +12,7 @@ import com.ticketfactory.integration.GitHubClient;
 import com.ticketfactory.integration.RateLimitedException;
 import com.ticketfactory.integration.SandboxRunner;
 import com.ticketfactory.integration.StepFailedException;
+import com.ticketfactory.integration.UnrecoverableStepException;
 import com.ticketfactory.integration.TicketContext;
 import com.ticketfactory.queue.Job;
 import com.ticketfactory.queue.JobContext;
@@ -271,6 +272,10 @@ public class TicketPipeline implements JobHandler {
 
     /** Returns the job outcome if the job should stop here, or null to keep looping. */
     private JobOutcome onStepFailure(Ticket t, StepFailedException e) {
+        if (e instanceof UnrecoverableStepException) {
+            failQuietly(t.id(), t.state() + " failed: " + e.getMessage());
+            return null;
+        }
         int retries = tickets.incrementRetries(t.id());
         int max = props.guardrails().maxRetries();
         if (retries > max) {

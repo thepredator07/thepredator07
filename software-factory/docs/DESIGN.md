@@ -209,9 +209,31 @@ real throwaway repo from `.github/workflows/factory-live.yml`.
 | Janitor | `SandboxJanitor` (every 10 minutes, all modes) removes sandboxes whose ticket finished or no longer exists. Running tickets keep theirs: lease recovery hands them to another worker. |
 | Concurrency | Host git operations on the same repo are serialized per repo; different repos run in parallel. |
 
-The image (default `buildpack-deps:bookworm-scm`) only needs git and a shell for now; it is pulled automatically on
-first use. The checks runner (M4) and agent (M5) will need an image with the target repo's toolchain and the agent CLI,
-and will run inside the sandbox through `DockerSandboxRunner.exec`.
+An init process (Docker's `--init`) is PID 1 and reaps orphans, so processes killed by a check timeout don't pile up
+as zombies.
+
+The image (default `buildpack-deps:bookworm-scm`) has git, a shell, Python and Perl; it is pulled automatically on first
+use. Checks run in it through `DockerSandboxRunner.exec`; a target repo in another language needs an image with its
+toolchain, and the agent (M5) needs the agent CLI.
+
+### Checks in the sandbox (M4)
+
+`SandboxChecksRunner` runs the target repo's check command in the ticket's sandbox, on the agent's working tree:
+
+```yaml
+# .factory.yml in the target repo, on the base branch
+checks:
+  command: python3 -m unittest -v   # any shell command; exit code 0 means pass
+  timeout: 15m                      # optional; capped by factory.checks.max-timeout
+```
+
+| Property | How |
+|----------|-----|
+| Can't be weakened by the agent | The file is read **on the host** from the base branch (`HostGit.readFile`), fetched fresh each run. The sandbox's copy is ignored. |
+| Timeout | `timeout -k 10s <n>s sh -c <command>` inside the sandbox kills the command and its process group; the host waits 70 s longer as a backstop. A timeout is reported as failed checks, so the agent sees it. |
+| Bounded output | `BoundedOutput` keeps the first 8 KB and last ~55 KB in fixed memory; the result (command, output, exit code and duration) is at most 64 K characters, which the pipeline stores and passes to the agent. |
+| Misconfiguration | No file (and no `factory.checks.default-command`), invalid YAML, or no `checks.command`: `UnrecoverableStepException`, and the ticket fails at once with the reason. |
+| Isolation | Same sandbox, so no network: dependencies must be in the image or the repo. |
 
 **Network for the agent (M5):** the sandbox has none today. The agent will need to reach the model API, and nothing
 else. That needs an egress proxy with a host allowlist, added with the agent in M5 rather than here (decision 44).
@@ -250,7 +272,7 @@ enforces the policy too, so a Phase 2 client must call it as well.
    model API, CPU and memory limits, destroyed when the ticket ends.
 2. `ClaudeCodeAgentRunner`: run Claude Code headless in the sandbox with `--max-turns` set to the remaining budget,
    parse the usage it reports into `AgentResult`, push commits to `factory/<id>`.
-3. `SandboxChecksRunner`: run the target repo's build and test command in the sandbox.
+3. ~~`SandboxChecksRunner`~~: done in M4 (see "Checks in the sandbox").
 4. `GitHubRestClient`: GitHub App auth from env, list issues by label, open PRs, read review state (approved, changes
    requested, closed), and comment. Use webhooks instead of polling if latency matters.
 5. ~~A switch `factory.integrations=fake|real`~~: done in M0; real implementations register in `RealIntegrationsConfig`.
