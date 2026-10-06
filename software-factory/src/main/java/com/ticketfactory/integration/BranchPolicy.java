@@ -15,13 +15,19 @@ public final class BranchPolicy {
         return PREFIX + ticketId;
     }
 
+    /** Throws unless {@code branch} is {@code factory/<something>} (so never main, master or anyone else's branch). */
+    public static void validateBranch(String branch) {
+        if (branch == null || !branch.startsWith(PREFIX) || branch.length() == PREFIX.length()
+                || PROTECTED.contains(branch) || branch.contains("..") || branch.contains(" ")) {
+            throw new IllegalArgumentException("Refusing to push branch '" + branch + "': must be " + PREFIX + "<id>");
+        }
+    }
+
     /** Throws if {@code head} is not a factory branch or the PR would not target a different base branch. */
     public static void validatePullRequest(String head, String base) {
-        if (head == null || !head.startsWith(PREFIX) || head.length() == PREFIX.length()) {
-            throw new IllegalArgumentException("Refusing to push branch '" + head + "': must be " + PREFIX + "<id>");
-        }
-        if (PROTECTED.contains(head) || head.equals(base)) {
-            throw new IllegalArgumentException("Refusing to push to protected branch '" + head + "'");
+        validateBranch(head);
+        if (head.equals(base)) {
+            throw new IllegalArgumentException("Refusing to open a PR from '" + head + "' into itself");
         }
     }
 }

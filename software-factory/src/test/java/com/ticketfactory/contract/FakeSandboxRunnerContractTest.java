@@ -20,6 +20,11 @@ class FakeSandboxRunnerContractTest extends SandboxRunnerContract {
     }
 
     @Override
+    protected boolean isPublished(String repo, String branch) {
+        return fake.isPublished(repo, branch);
+    }
+
+    @Override
     protected Optional<SandboxRunner> failingRunner() {
         return Optional.of(new FakeSandboxRunner(FakeBehavior.FAIL));
     }

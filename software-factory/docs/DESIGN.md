@@ -187,6 +187,35 @@ endpoints above, including paging, ETags, label events, permissions, App token e
 `GitHubAppAuthTest` cover the rest. `LiveGitHubClientContractTest` (tag `live`) runs the same contract against a
 real throwaway repo from `.github/workflows/factory-live.yml`.
 
+## Docker sandbox (M3)
+
+`integration/docker/`: `DockerSandboxRunner` (docker-java over the Docker socket) and `HostGit`.
+
+```
+ factory host                                              sandbox container "factory-<ticket-id>"
+ ────────────                                              ───────────────────────────────────────
+ bare clone of owner/repo  ── git bundle of base ──exec──▶  /workspace/repo on factory/<ticket-id>
+ (fetch/push with token)                                    (no network, no token, user 1000)
+          ▲                                                           │ agent commits (M5)
+          └──── push factory/<ticket-id> ◀── git bundle ──exec── ◀────┘
+```
+
+| Property | How |
+|----------|-----|
+| Isolation | `--network none`, user `1000:1000`, read-only root filesystem, `--cap-drop ALL`, `no-new-privileges`, memory (= memory+swap), CPU and pids limits. `/workspace` and `/tmp` are size-limited tmpfs owned by the sandbox user. |
+| No credentials inside | The host holds the GitHub token (passed to git through environment config, never the command line) and does all fetching and pushing. Code moves as single-file git bundles streamed through `docker exec` stdin/stdout. Docker's archive API can't be used: it refuses to write into a read-only container and can't see tmpfs. |
+| Never push main | `BranchPolicy.validateBranch` runs in `DockerSandboxRunner.publishBranch` **and** in `HostGit.pushBranch`; the push refspec is always `refs/heads/factory/<id>`. |
+| Idempotent | `prepare` reuses a running sandbox whose repo is checked out (work in progress survives a worker crash). A stopped or half-prepared one has lost its tmpfs, so it is replaced. A failed `prepare` removes what it created. |
+| Janitor | `SandboxJanitor` (every 10 minutes, all modes) removes sandboxes whose ticket finished or no longer exists. Running tickets keep theirs: lease recovery hands them to another worker. |
+| Concurrency | Host git operations on the same repo are serialized per repo; different repos run in parallel. |
+
+The image (default `buildpack-deps:bookworm-scm`) only needs git and a shell for now; it is pulled automatically on
+first use. The checks runner (M4) and agent (M5) will need an image with the target repo's toolchain and the agent CLI,
+and will run inside the sandbox through `DockerSandboxRunner.exec`.
+
+**Network for the agent (M5):** the sandbox has none today. The agent will need to reach the model API, and nothing
+else. That needs an egress proxy with a host allowlist, added with the agent in M5 rather than here (decision 44).
+
 ## Fakes
 
 Each fake takes its behavior from three places, in priority order:

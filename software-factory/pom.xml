@@ -21,7 +21,31 @@
         <java.version>21</java.version>
         <!-- Tests tagged "live" talk to real GitHub; run them with: mvn test -Dgroups=live -Dsurefire.excludedGroups= -->
         <surefire.excludedGroups>live</surefire.excludedGroups>
+        <!-- Same version Testcontainers uses, so there is one docker-java on the classpath -->
+        <docker-java.version>3.4.2</docker-java.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- docker-java 3.4.2 brings commons-compress 1.21 and Guava 19, both with published CVEs.
+                 commons-compress 1.28 in turn needs a newer commons-io than docker-java's 2.13. -->
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>2.22.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-compress</artifactId>
+                <version>1.28.0</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>33.7.2-jre</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -51,6 +75,16 @@
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-core</artifactId>
+            <version>${docker-java.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-transport-zerodep</artifactId>
+            <version>${docker-java.version}</version>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>

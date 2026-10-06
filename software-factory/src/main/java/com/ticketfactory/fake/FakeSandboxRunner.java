@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class FakeSandboxRunner extends AbstractFake implements SandboxRunner {
 
     private final Set<String> live = ConcurrentHashMap.newKeySet();
+    private final Set<String> published = ConcurrentHashMap.newKeySet();
     private final java.util.concurrent.atomic.AtomicInteger created = new java.util.concurrent.atomic.AtomicInteger();
 
     public FakeSandboxRunner(FakeBehavior configured) {
@@ -25,12 +26,31 @@ public class FakeSandboxRunner extends AbstractFake implements SandboxRunner {
         if (live.add(id)) {
             created.incrementAndGet();
         }
-        return new Sandbox(id, "/workspace/" + ticket.repo() + "@" + ticket.branchName());
+        return new Sandbox(id, ticket.ticketId(), "/workspace/" + ticket.repo() + "@" + ticket.branchName());
+    }
+
+    @Override
+    public void publishBranch(TicketContext ticket, String sandboxId) {
+        com.ticketfactory.integration.BranchPolicy.validateBranch(ticket.branchName());
+        if (!live.contains(sandboxId)) {
+            throw new StepFailedException("fake sandbox: " + sandboxId + " does not exist");
+        }
+        published.add(ticket.repo() + "@" + ticket.branchName());
     }
 
     @Override
     public void destroy(String sandboxId) {
         live.remove(sandboxId);
+    }
+
+    @Override
+    public java.util.List<Sandbox> list() {
+        return live.stream().map(id -> new Sandbox(id, Long.parseLong(id.substring("fake-sbx-".length())), "/workspace"))
+                .toList();
+    }
+
+    public boolean isPublished(String repo, String branch) {
+        return published.contains(repo + "@" + branch);
     }
 
     public boolean isLive(String sandboxId) {
@@ -50,6 +70,7 @@ public class FakeSandboxRunner extends AbstractFake implements SandboxRunner {
     public void reset() {
         super.reset();
         live.clear();
+        published.clear();
         created.set(0);
     }
 }

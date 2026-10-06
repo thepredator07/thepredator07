@@ -240,6 +240,8 @@ public class TicketPipeline implements JobHandler {
             }
             return CONTINUE;
         }
+        // Push the branch first: on real GitHub a PR needs it to exist. Idempotent, so retries are safe.
+        sandbox.publishBranch(context(t, t.branchName()), t.sandboxId());
         if (t.prNumber() == null) {
             GitHubClient.PullRequest pr = github.openPullRequest(new GitHubClient.PullRequestRequest(
                     t.repo(), t.issueNumber(), t.branchName(), props.baseBranch(),

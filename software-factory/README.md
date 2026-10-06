@@ -57,7 +57,7 @@ features (`FOR UPDATE SKIP LOCKED`, partial unique indexes). That gives 249 test
 | Dashboard: ticket list, ticket detail with history, stats; cancel and fake-approve buttons | Built |
 | Demo profile with seeded and live tickets | Built |
 | Docker Compose (app + postgres), GitHub Actions CI | Built |
-| Real Docker sandbox | **Not built** (Phase 2): stub in `integration/phase2/DockerSandboxRunner` |
+| Docker sandbox (`DockerSandboxRunner`): one container per attempt, no network, no credentials, non-root, read-only root, all capabilities dropped, memory/CPU/process limits; code moves in and out as git bundles and the host pushes the branch; a janitor removes orphans | Built (M3), tested on real Docker |
 | Real Claude Code agent | **Not built** (Phase 2): stub in `integration/phase2/ClaudeCodeAgentRunner` |
 | Real GitHub client (`GitHubRestClient`): GitHub App or token auth, complete paged issue listing, ETag caching, trigger time and labeler permission from label events, idempotent PR opening, review-based approval, rate-limit handling | Built (M2), tested against a GitHub API simulator; live nightly test ready but **not run yet** (needs the test repo) |
 | Real checks in the sandbox | **Not built** (Phase 2): stub in `integration/phase2/SandboxChecksRunner` |
@@ -74,6 +74,8 @@ Everything is set through environment variables; see [`.env.example`](.env.examp
 | `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY_PATH` | none | Real GitHub via a GitHub App (recommended) |
 | `GITHUB_TOKEN` | none | Real GitHub via a token, if no App is configured |
 | `FACTORY_MIN_LABELER_PERMISSION` | `write` | Issues labeled by someone with less repo permission are ignored |
+| `FACTORY_SANDBOX_IMAGE`, `FACTORY_SANDBOX_MEMORY`, `FACTORY_SANDBOX_CPUS` | `buildpack-deps:bookworm-scm`, `4g`, `2.0` | Sandbox container (real mode) |
+| `FACTORY_WORK_DIR` | `/var/lib/factory` | Host-side bare clones of target repos (real mode) |
 | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | `jdbc:postgresql://localhost:5432/factory`, `factory`, empty | Postgres connection |
 | `FACTORY_REPO` / `FACTORY_TRIGGER_LABEL` | `example-org/example-repo` / `factory` | Which issues to pick up |
 | `FACTORY_MAX_COST_USD` | `2.00` | Ticket fails once its total agent cost goes over this |
