@@ -72,7 +72,7 @@ curl -X POST localhost:8080/api/fake/issues/501/close     # a running attempt wi
 cd software-factory && mvn clean verify      # needs Docker running (Testcontainers)
 ```
 
-Expect `Tests run: 212, Failures: 0, Errors: 0, Skipped: 0` and `BUILD SUCCESS` (about 45 seconds after
+Expect `Tests run: 211, Failures: 0, Errors: 0, Skipped: 0` and `BUILD SUCCESS` (about 45 seconds after
 dependencies are downloaded).
 
 ---
