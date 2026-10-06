@@ -106,3 +106,4 @@ curl -X POST localhost:8080/api/fake/issues -H 'Content-Type: application/json' 
 - [MORNING.md](MORNING.md): 5-minute hands-on check, plus the test results table
 - [docs/DESIGN.md](docs/DESIGN.md): architecture, state machine, queue, guardrails, Phase 2 plan
 - [docs/DECISIONS.md](docs/DECISIONS.md): every judgment call made during the build
+- [docs/PHASE2-PLAN.md](docs/PHASE2-PLAN.md): architecture review, Phase 2 readiness findings, test strategy, milestone plan
