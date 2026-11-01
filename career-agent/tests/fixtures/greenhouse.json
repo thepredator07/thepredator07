@@ -1,0 +1,75 @@
+{
+ "jobs": [
+  {
+   "id": 1001,
+   "title": "Software Engineer II - Backend",
+   "absolute_url": "https://boards.greenhouse.io/acmepay/jobs/1001",
+   "first_published": "2026-10-31T06:00:00+00:00",
+   "updated_at": "2026-10-31T06:00:00+00:00",
+   "location": {
+    "name": "Bengaluru, India"
+   },
+   "offices": [
+    {
+     "name": "Bangalore"
+    }
+   ],
+   "departments": [
+    {
+     "name": "Engineering"
+    }
+   ],
+   "content": "&lt;p&gt;We are looking for a Backend Engineer to build payment rails.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;3-5 years of experience building backend services in Java and Spring Boot&lt;/li&gt;&lt;li&gt;Experience with Kafka, Redis and MySQL&lt;/li&gt;&lt;li&gt;Kubernetes, AWS&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;CTC: ₹18 - 26 LPA&lt;/p&gt;"
+  },
+  {
+   "id": 1002,
+   "title": "Senior Frontend Engineer",
+   "absolute_url": "https://boards.greenhouse.io/acmepay/jobs/1002",
+   "first_published": "2026-10-30T06:00:00+00:00",
+   "location": {
+    "name": "Bengaluru"
+   },
+   "content": "&lt;p&gt;React&lt;/p&gt;"
+  },
+  {
+   "id": 1003,
+   "title": "Staff Software Engineer, Platform",
+   "absolute_url": "https://boards.greenhouse.io/acmepay/jobs/1003",
+   "first_published": "2026-10-30T06:00:00+00:00",
+   "location": {
+    "name": "Remote - India"
+   },
+   "content": "&lt;p&gt;10+ years of experience&lt;/p&gt;"
+  },
+  {
+   "id": 1004,
+   "title": "Backend Engineer (Java)",
+   "absolute_url": "https://boards.greenhouse.io/acmepay/jobs/1004",
+   "first_published": "2026-10-29T06:00:00+00:00",
+   "location": {
+    "name": "San Francisco, CA, United States"
+   },
+   "content": "&lt;p&gt;Java&lt;/p&gt;"
+  },
+  {
+   "id": 1005,
+   "title": "Software Engineer - Distributed Systems",
+   "absolute_url": "https://boards.greenhouse.io/acmepay/jobs/1005",
+   "first_published": "2026-09-02T06:00:00+00:00",
+   "location": {
+    "name": "Pune, India"
+   },
+   "content": "&lt;p&gt;2+ years experience&lt;/p&gt;"
+  },
+  {
+   "id": 1006,
+   "title": "Software Engineer, Payments Platform",
+   "absolute_url": "https://boards.greenhouse.io/acmepay/jobs/1006",
+   "first_published": "2026-11-01T06:00:00+00:00",
+   "location": {
+    "name": "Remote"
+   },
+   "content": "&lt;p&gt;Minimum 7 years of experience in backend engineering.&lt;/p&gt;"
+  }
+ ]
+}

@@ -1,0 +1,44 @@
+name: Career agent (Module A)
+
+on:
+  push:
+    paths: ['career-agent/**', '.github/workflows/career-agent.yml']
+  pull_request:
+    paths: ['career-agent/**', '.github/workflows/career-agent.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.6
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: career-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Workflow JSON is up to date with n8n/src
+        run: node scripts/build-workflows.mjs --check
+      - name: Unit tests
+        run: node --test tests/discovery-lib.test.mjs
+      - name: Install n8n (pinned to the docker-compose version)
+        run: npm install --prefix "$RUNNER_TEMP/n8n" n8n@2.45.7 --no-audit --no-fund --loglevel=error
+      - name: End-to-end test (real n8n, mock job boards + mock Claude)
+        env:
+          N8N_BIN: ${{ runner.temp }}/n8n/node_modules/.bin/n8n
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: tests/e2e/run-e2e.sh

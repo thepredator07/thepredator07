@@ -1,0 +1,37 @@
+{
+ "totalFound": 2,
+ "content": [
+  {
+   "id": "744000001",
+   "name": "Java Developer",
+   "releasedDate": "2026-10-29T06:00:00+00:00",
+   "location": {
+    "city": "Hyderabad",
+    "country": "in",
+    "remote": false
+   },
+   "company": {
+    "identifier": "Freshworks",
+    "name": "Freshworks"
+   },
+   "department": {
+    "label": "Engineering"
+   },
+   "typeOfEmployment": {
+    "label": "Full-time"
+   }
+  },
+  {
+   "id": "744000002",
+   "name": "Customer Support Engineer",
+   "releasedDate": "2026-10-29T06:00:00+00:00",
+   "location": {
+    "city": "Chennai",
+    "country": "in"
+   },
+   "company": {
+    "identifier": "Freshworks"
+   }
+  }
+ ]
+}

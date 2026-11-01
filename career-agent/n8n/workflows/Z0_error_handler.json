@@ -1,0 +1,97 @@
+{
+  "id": "careerZ0ErrorHnd",
+  "name": "Z0 Error Handler",
+  "nodes": [
+    {
+      "id": "z0-trigger",
+      "name": "On workflow error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "z0-log",
+      "name": "Log error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO execution_log (workflow, execution_id, node, level, message, context)\nVALUES ($1, $2, $3, 'error', $4, $5::jsonb);\nUPDATE discovery_runs SET status = 'failed', finished_at = now(), error = $4\n WHERE n8n_execution_id = $2 AND status = 'running';\nSELECT (SELECT value->>'telegram_chat_id' FROM settings WHERE key = 'notifications') AS telegram_chat_id;",
+        "options": {
+          "queryReplacement": "={{ $json.workflow.name }},{{ $json.execution.id }},{{ $json.execution.lastNodeExecuted }},{{ ($json.execution.error && $json.execution.error.message) || \"unknown error\" }},{{ JSON.stringify($json.execution) }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "careerPostgres01",
+          "name": "Career Postgres"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "id": "z0-telegram",
+      "name": "Telegram alert (optional)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        480,
+        0
+      ],
+      "disabled": true,
+      "parameters": {
+        "chatId": "={{ $('Log error').first().json.telegram_chat_id }}",
+        "text": "=⚠️ Career agent: {{ $('On workflow error').first().json.workflow.name }} failed at \"{{ $('On workflow error').first().json.execution.lastNodeExecuted }}\"\n{{ $('On workflow error').first().json.execution.error.message }}\n{{ $('On workflow error').first().json.execution.url }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "telegramBotApi01",
+          "name": "Telegram bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "On workflow error": {
+      "main": [
+        [
+          {
+            "node": "Log error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log error": {
+      "main": [
+        [
+          {
+            "node": "Telegram alert (optional)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata"
+  },
+  "pinData": {},
+  "active": false
+}

@@ -1,0 +1,14 @@
+{
+ "jobs": [
+  {
+   "id": 9001,
+   "title": "Software Engineer 2 – Backend",
+   "absolute_url": "https://boards.greenhouse.io/acmepay-india/jobs/9001",
+   "first_published": "2026-10-31T06:00:00+00:00",
+   "location": {
+    "name": "Bangalore"
+   },
+   "content": "&lt;p&gt;We are looking for a Backend Engineer to build payment rails.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;3-5 years of experience building backend services in Java and Spring Boot&lt;/li&gt;&lt;li&gt;Experience with Kafka, Redis and MySQL&lt;/li&gt;&lt;li&gt;Kubernetes, AWS&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;CTC: ₹18 - 26 LPA&lt;/p&gt;"
+  }
+ ]
+}

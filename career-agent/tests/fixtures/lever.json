@@ -1,0 +1,56 @@
+[
+ {
+  "id": "lv-1",
+  "text": "SDE 2 - Backend (Java/Kafka)",
+  "categories": {
+   "location": "Mumbai",
+   "team": "Lending",
+   "commitment": "Full-time",
+   "allLocations": [
+    "Mumbai",
+    "Pune"
+   ]
+  },
+  "workplaceType": "hybrid",
+  "createdAt": 1793340000000,
+  "hostedUrl": "https://jobs.lever.co/creditco/lv-1",
+  "applyUrl": "https://jobs.lever.co/creditco/lv-1/apply",
+  "descriptionPlain": "Own high-throughput lending APIs.",
+  "lists": [
+   {
+    "text": "Requirements",
+    "content": "<li>2 to 4 years of experience with Java, Spring Boot, microservices</li><li>Kafka, PostgreSQL</li>"
+   }
+  ],
+  "additionalPlain": "",
+  "salaryRange": {
+   "currency": "INR",
+   "interval": "per-year-salary",
+   "min": 2200000,
+   "max": 3000000
+  }
+ },
+ {
+  "id": "lv-2",
+  "text": "Software Development Engineer - Platform",
+  "categories": {
+   "location": "Hyderabad"
+  },
+  "workplaceType": "onsite",
+  "createdAt": 1793167200000,
+  "hostedUrl": "https://jobs.lever.co/creditco/lv-2",
+  "descriptionPlain": "Build our internal developer platform. 3+ years of experience with Go or Java.",
+  "lists": []
+ },
+ {
+  "id": "lv-3",
+  "text": "Software Engineer Intern",
+  "categories": {
+   "location": "Mumbai"
+  },
+  "createdAt": 1793426400000,
+  "hostedUrl": "https://jobs.lever.co/creditco/lv-3",
+  "descriptionPlain": "Internship",
+  "lists": []
+ }
+]

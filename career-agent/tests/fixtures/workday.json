@@ -1,0 +1,23 @@
+{
+ "total": 57,
+ "jobPostings": [
+  {
+   "title": "Software Engineer 2 - Java Microservices",
+   "externalPath": "/job/Bangalore/Software-Engineer-2_R0001",
+   "locationsText": "Bangalore, Karnataka, India",
+   "postedOn": "Posted 3 Days Ago",
+   "bulletFields": [
+    "R0001"
+   ]
+  },
+  {
+   "title": "Software Engineer - Backend",
+   "externalPath": "/job/Chennai/Software-Engineer_R0002",
+   "locationsText": "Chennai, India",
+   "postedOn": "Posted Today",
+   "bulletFields": [
+    "R0002"
+   ]
+  }
+ ]
+}

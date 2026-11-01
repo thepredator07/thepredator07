@@ -1,0 +1,41 @@
+{
+ "jobs": [
+  {
+   "id": "as-1",
+   "title": "Backend Engineer, Streaming",
+   "location": "Remote (India)",
+   "secondaryLocations": [],
+   "department": "Engineering",
+   "isRemote": true,
+   "workplaceType": "Remote",
+   "employmentType": "FullTime",
+   "descriptionPlain": "You will build Kafka-based CDC pipelines. 2-5 yrs experience with JVM languages.",
+   "publishedAt": "2026-10-31T06:00:00+00:00",
+   "jobUrl": "https://jobs.ashbyhq.com/streamco/as-1",
+   "applyUrl": "https://jobs.ashbyhq.com/streamco/as-1/application",
+   "isListed": true,
+   "compensation": {
+    "compensationTierSummary": "₹12L – ₹14L",
+    "summaryComponents": [
+     {
+      "compensationType": "Salary",
+      "interval": "1 YEAR",
+      "currencyCode": "INR",
+      "minValue": 1200000,
+      "maxValue": 1400000
+     }
+    ]
+   }
+  },
+  {
+   "id": "as-2",
+   "title": "Software Engineer, Backend",
+   "location": "Bengaluru",
+   "isRemote": false,
+   "descriptionPlain": "Java, Spring. Experience: 3-6 years.",
+   "publishedAt": "2026-10-30T06:00:00+00:00",
+   "jobUrl": "https://jobs.ashbyhq.com/streamco/as-2",
+   "isListed": false
+  }
+ ]
+}
