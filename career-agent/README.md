@@ -11,14 +11,14 @@ remote, joining November 2026 – January 2027.
 |---|---|---|
 | **A. Job discovery** | Daily pull from company job boards, de-dupe, expiry, pre-filter, Claude 0–100 scoring | **Built and tested** |
 | B. LinkedIn networking | People research from URLs you provide, drafted connection notes | Next |
-| C. Gmail recruiter assistant | Classify/extract recruiter mail, draft replies (never auto-send) | Planned |
+| **C. Gmail recruiter assistant** | Triage, classify and extract recruiter mail, link to company/application, Gmail reply drafts (never sent), Telegram alerts | **Built and tested** |
 | D. Referral tracking | Follow-up timing with a hard cap of 2 follow-ups | Planned (tables exist) |
 | E. Application tracker + dashboard | Status pipeline, duplicate-application guard | Planned (tables exist) |
 | F. Resume / JD matching | ATS report, suggested edits, tailored version after approval | Planned |
 | G. Interview prep | Prep pack from interview emails, calendar after approval | Planned |
 | H. Daily career brief | Telegram/email morning summary | Planned |
 
-Module A details, test results and how to run it: **[docs/module-a.md](docs/module-a.md)**.
+Details, test results and how to run each module: **[docs/module-a.md](docs/module-a.md)** (job discovery), **[docs/module-c.md](docs/module-c.md)** (Gmail assistant).
 
 ---
 
@@ -97,9 +97,10 @@ with the query in docs/module-a.md §8.
 |---|---|---|
 | Hosting | ₹0 (laptop, or Oracle Cloud Always Free VM) | ₹450 (Hetzner CX22 / similar 2 vCPU 4 GB VPS) |
 | Module A scoring, Opus 5.5 | ₹1,100–2,200 | same |
-| Modules B–H on Claude (email triage ~20/day, drafts, prep packs, brief) | ~₹800–1,500 | ~₹1,500–2,500 |
+| Module C email analysis + drafts, Opus 5.5 at medium effort (5–15 job emails/day) | ₹400–1,200 | same |
+| Modules B, D–H on Claude (drafts, prep packs, brief) | ~₹400–800 | ~₹1,000–1,500 |
 | Everything else | ₹0 | ₹0 |
-| **Total** | **≈ ₹2,000–3,700** | **≈ ₹3,000–5,000** |
+| **Total** | **≈ ₹1,900–4,200** | **≈ ₹3,000–5,400** |
 
 The scoring model is one setting. Claude Sonnet 5.5 ($2 / $10) would cost roughly half for
 scoring and Claude Haiku 5.5 ($0.10 / $0.50) roughly ₹50 a month; whether the cheaper models score
@@ -122,7 +123,8 @@ One `career` database; full schema in [db/001_schema.sql](db/001_schema.sql), se
 | `execution_log` | all | Info/warn/error from every workflow and the error handler |
 | `people`, `outreach_messages`, `referrals` | B, D | One live connect request per person (partial unique index); follow-ups capped at 2 |
 | `applications`, `application_events`, `resume_versions` | E, F | One application per job (unique index) |
-| `email_threads`, `interviews` | C, G | Gmail draft id stored; never sent automatically |
+| `email_messages`, `email_threads`, `email_drafts`, `interviews` | C, G | Every message triaged once; drafts created in Gmail, never sent ([db/003_module_c.sql](db/003_module_c.sql)) |
+| `notifications`, `workflow_locks` | all | Alert queue for N1 (Telegram); run leases against overlapping runs |
 | `approvals` | all | Queue for every external action |
 | `v_job_matches` | A, H | Latest score per job, used by the brief and dashboard |
 
@@ -131,10 +133,11 @@ One `career` database; full schema in [db/001_schema.sql](db/001_schema.sql), se
 | ID | Workflow | Trigger | External actions |
 |---|---|---|---|
 | `careerA1Discover` | **A1 Job Discovery** | Daily 07:00 IST + manual | None (read-only HTTP GETs to job boards) |
+| `careerC1GmailTri` | **C1 Gmail Triage** | Every 15 min + manual | Gmail **drafts** only (scopes: gmail.readonly + gmail.compose) |
+| `careerN1Notifier` | **N1 Notifier** | Every 5 min | Telegram messages to you only |
 | `careerZ0ErrorHnd` | **Z0 Error Handler** | Any workflow failure | Optional Telegram alert to you |
 | — | A2 Job-alert email ingestion | Gmail, after Module C's OAuth setup | None |
 | — | B1 People research, B2 Connection-note drafts | Manual / new target company | Drafts only |
-| — | C1 Gmail triage, C2 Reply drafts | Gmail poll every 15 min | Gmail drafts only |
 | — | D1 Referral follow-up planner | Daily | Drafts only |
 | — | E1 Status sync + dashboard views | On change / daily | None |
 | — | F1 JD vs resume report | Job marked `shortlisted` | Tailored resume only after approval |
@@ -154,8 +157,9 @@ career-agent/
   scripts/build-workflows.mjs   n8n/src -> n8n/workflows
   scripts/bootstrap.sh      create n8n credentials from .env, import workflows
   scripts/verify-sources.sh check every job-board token once
+  scripts/migrate.sh        apply new db/0NN_*.sql files to an existing install
   tests/                    unit tests + end-to-end test in a real n8n with mocks
-  docs/module-a.md          Module A reference
+  docs/module-a.md, docs/module-c.md   module references
 ```
 
 ## 7. Ground rules the system enforces

@@ -1,4 +1,4 @@
-name: Career agent (Module A)
+name: Career agent
 
 on:
   push:
@@ -31,7 +31,7 @@ jobs:
       - name: Workflow JSON is up to date with n8n/src
         run: node scripts/build-workflows.mjs --check
       - name: Unit tests
-        run: node --test tests/discovery-lib.test.mjs
+        run: node --test tests/discovery-lib.test.mjs tests/email-lib.test.mjs
       - name: Install n8n (pinned to the docker-compose version)
         run: npm install --prefix "$RUNNER_TEMP/n8n" n8n@2.45.7 --no-audit --no-fund --loglevel=error
       - name: End-to-end test (real n8n, mock job boards + mock Claude)
@@ -41,4 +41,6 @@ jobs:
           PGPORT: '5432'
           PGUSER: postgres
           PGPASSWORD: postgres
-        run: tests/e2e/run-e2e.sh
+        run: |
+          tests/e2e/run-e2e.sh
+          tests/e2e/run-e2e-gmail.sh

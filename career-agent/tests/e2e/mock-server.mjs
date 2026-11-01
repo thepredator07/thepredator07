@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gmailRoute, telegramRoute, claudeEmail, gmailState } from './mock-gmail.mjs';
 
 const fx = (n) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', `${n}.json`), 'utf8');
 const port = Number(process.argv[2] || 8787);
@@ -56,7 +57,16 @@ createServer((req, res) => {
   req.on('end', () => {
     const key = `${req.method} ${req.url.split('?')[0].toLowerCase()}`;
     let status; let body;
-    if (key === 'POST /v1/messages') [status, body] = claude(JSON.parse(data || '{}'), req.headers);
+    const routed = gmailRoute(req.method, req.url, req.headers, data) || telegramRoute(req.method, req.url, data);
+    if (routed) [status, body] = routed;
+    else if (key === 'POST /v1/messages') {
+      const reqBody = JSON.parse(data || '{}');
+      if (!req.headers['x-api-key']) [status, body] = [401, { error: { message: 'missing key' } }];
+      else if (/email assistant/.test(JSON.stringify(reqBody.system || ''))) [status, body] = claudeEmail(reqBody);
+      else [status, body] = claude(reqBody, req.headers);
+    }
+    else if (key === 'POST /control/add-m9') { gmailState.visible.push('m9'); [status, body] = [200, { ok: true }]; }
+    else if (key === 'GET /control/gmail') [status, body] = [200, gmailState];
     else if (key === 'POST /control/remove-1001') { removeJob1001 = true; [status, body] = [200, { ok: true }]; }
     else if (key === 'GET /control/calls') [status, body] = [200, calls];
     else if (boards[key]) [status, body] = boards[key]();

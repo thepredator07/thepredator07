@@ -6,7 +6,9 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname n8n <<SQL
 CREATE ROLE career_app LOGIN PASSWORD '${CAREER_DB_PASSWORD}';
 CREATE DATABASE career OWNER "$POSTGRES_USER";
 SQL
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname career -f /career-sql/001_schema.sql -f /career-sql/002_seed.sql
+for f in /career-sql/0*.sql; do
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname career -f "$f"
+done
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname career <<SQL
 GRANT CONNECT ON DATABASE career TO career_app;
 GRANT USAGE ON SCHEMA public TO career_app;
